@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from 'react';
 
-// Keep useEffect for client-side formatting
-
 import Image from 'next/image';
 
 import { GameInstance } from '@/generated/prisma';
@@ -119,18 +117,18 @@ export function LastManStandingGame({
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Make Your Pick for This Week</CardTitle>
+                <CardTitle className='text-center'>Make Your Pick for This Week</CardTitle>
             </CardHeader>
             <CardContent>
-                <p className='mb-4'>Select one team you predict will win their match this week.</p>
+                <p className='mb-4 text-center'>Select one team you predict will win their match this week.</p>
                 <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
                     {fixtures.map((fixture) => (
                         <div key={fixture.id} className='rounded-md border p-4'>
-                            <h3 className='mb-2 font-semibold'>
+                            <h3 className='mb-2 text-center font-semibold'>
                                 {fixture.participants.find((p) => p.meta.location === 'home')?.name} vs{' '}
                                 {fixture.participants.find((p) => p.meta.location === 'away')?.name}
                             </h3>
-                            <p className='text-muted-foreground text-sm'>
+                            <p className='text-muted-foreground text-center text-sm'>
                                 Kick-off: {formattedDates[fixture.id] || new Date(fixture.starting_at).toISOString()}
                             </p>
                             <div className='mt-4 flex justify-around'>

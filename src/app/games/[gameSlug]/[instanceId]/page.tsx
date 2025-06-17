@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { GameRulesButton } from '@/components/game-rules-button';
 import { LastManStandingGame } from '@/components/last-man-standing-game';
 import { LastManStandingLeaderboard } from '@/components/last-man-standing-leaderboard';
+import TablePredictorGame from '@/components/table-predictor-game';
+import TablePredictorLeaderboard from '@/components/table-predictor-leaderboard';
 import { Game, GameInstance } from '@/generated/prisma';
 import prisma from '@/lib/prisma';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/registry/new-york-v4/ui/card';
@@ -117,36 +119,64 @@ export default async function GamePage({ params }: GamePageProps) {
     ];
     const isSeasonFinished: boolean = false; // Hardcode for testing
 
+    const dummyTeams = [
+        { id: 'team-arsenal', name: 'Arsenal', logoPath: '/images/teams/arsenal.png' },
+        { id: 'team-chelsea', name: 'Chelsea', logoPath: '/images/teams/chelsea.png' },
+        { id: 'team-liverpool', name: 'Liverpool', logoPath: '/images/teams/liverpool.png' },
+        { id: 'team-man-utd', name: 'Man Utd', logoPath: '/images/teams/man_utd.png' },
+        { id: 'team-man-city', name: 'Man City', logoPath: '/images/teams/machester_city.png' },
+        { id: 'team-tottenham', name: 'Tottenham', logoPath: '/images/teams/tottenham.png' },
+        { id: 'team-newcastle', name: 'Newcastle', logoPath: '/images/teams/newcastle.png' },
+        { id: 'team-brighton', name: 'Brighton', logoPath: '/images/teams/brighton.png' },
+        { id: 'team-west-ham', name: 'West Ham', logoPath: '/images/teams/west_ham.png' },
+        { id: 'team-aston-villa', name: 'Aston Villa', logoPath: '/images/teams/aston_villa.png' },
+        { id: 'team-crystal-palace', name: 'Crystal Palace', logoPath: '/images/teams/crystal-palace.png' },
+        { id: 'team-fulham', name: 'Fulham', logoPath: '/images/teams/fulham.png' },
+        { id: 'team-wolves', name: 'Wolverhampton', logoPath: '/images/teams/wolverhampton.png' },
+        { id: 'team-bournemouth', name: 'Bournemouth', logoPath: '/images/teams/bournemouth.png' },
+        { id: 'team-brentford', name: 'Brentford', logoPath: '/images/teams/brentford.png' },
+        { id: 'team-everton', name: 'Everton', logoPath: '/images/teams/everton.png' },
+        { id: 'team-nottingham-forest', name: 'Nottingham Forest', logoPath: '/images/teams/nottingham_forest.png' },
+        { id: 'team-burnley', name: 'Burnley', logoPath: '/images/teams/burnley.png' },
+        { id: 'team-leeds', name: 'Leeds', logoPath: '/images/teams/leeds.png' },
+        { id: 'team-sunderland', name: 'Sunderland', logoPath: '/images/teams/sunderland.png' }
+    ];
+
     return (
         <div className='container mx-auto py-8'>
             <div className='mb-8 flex items-center justify-between'>
-                <h1 className='text-3xl font-bold'>{gameInstance.name}</h1>
+                <div className='flex-grow text-center'>
+                    <h1 className='text-3xl font-bold'>{gameInstance.name}</h1>
+                </div>
                 {game.description && <GameRulesButton title={`${game.name} Rules`} description={game.description} />}
             </div>
 
             <Card className='mb-6'>
-                <CardHeader>
-                    <CardTitle>Game Details</CardTitle>
-                    <CardDescription>{game.description}</CardDescription>
+                <CardHeader className='text-center'>
+                    <CardTitle className='text-center'>Game Details</CardTitle>
+                    <CardDescription className='text-center'>{game.description}</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className='flex flex-col items-center gap-2'>
                     <p>
-                        <strong>Game Type:</strong> {game.name}
+                        <strong className='font-medium'>Game Type:</strong> {game.name}
                     </p>
                     <p>
-                        <strong>Status:</strong> {gameInstance.status}
+                        <strong className='font-medium'>Status:</strong> {gameInstance.status}
                     </p>
                     <p>
-                        <strong>Starts:</strong> {new Date(gameInstance.startDate).toLocaleDateString()}
+                        <strong className='font-medium'>Starts:</strong>{' '}
+                        {new Date(gameInstance.startDate).toLocaleDateString()}
                     </p>
                     <p>
-                        <strong>Ends:</strong> {new Date(gameInstance.endDate).toLocaleDateString()}
+                        <strong className='font-medium'>Ends:</strong>{' '}
+                        {new Date(gameInstance.endDate).toLocaleDateString()}
                     </p>
                     <p>
-                        <strong>Entry Fee:</strong> £{(gameInstance.entryFee / 100).toFixed(2)}
+                        <strong className='font-medium'>Entry Fee:</strong> £{(gameInstance.entryFee / 100).toFixed(2)}
                     </p>
                     <p>
-                        <strong>Prize Pool:</strong> £{(gameInstance.prizePool / 100).toFixed(2)}
+                        <strong className='font-medium'>Prize Pool:</strong> £
+                        {(gameInstance.prizePool / 100).toFixed(2)}
                     </p>
                 </CardContent>
             </Card>
@@ -166,7 +196,16 @@ export default async function GamePage({ params }: GamePageProps) {
                     <LastManStandingLeaderboard gameInstanceId={gameInstance.id} />
                 </div>
             )}
-            {/* Add other game components here as they are implemented */}
+
+            {game.slug === 'table-predictor' && (
+                <TablePredictorGame gameInstanceId={gameInstance.id} initialTeams={dummyTeams} />
+            )}
+
+            {game.slug === 'table-predictor' && (
+                <div className='mt-8'>
+                    <TablePredictorLeaderboard gameInstanceId={gameInstance.id} teams={dummyTeams} />
+                </div>
+            )}
         </div>
     );
 }

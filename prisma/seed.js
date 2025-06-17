@@ -3,6 +3,29 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
+    // Delete old game instances for Table Predictor to ensure clean state
+    await prisma.gameInstance.deleteMany({
+        where: {
+            game: {
+                slug: 'premier-league-table-predictor' // Old slug
+            }
+        }
+    });
+    await prisma.gameInstance.deleteMany({
+        where: {
+            game: {
+                slug: 'table-predictor' // Current slug, to clear any previous instances
+            }
+        }
+    });
+
+    // Delete old game entry if it exists to ensure clean slug update
+    await prisma.game.deleteMany({
+        where: {
+            slug: 'premier-league-table-predictor'
+        }
+    });
+
     // Create Game entries
     const lastManStanding = await prisma.game.upsert({
         where: { slug: 'last-man-standing' },
@@ -16,11 +39,11 @@ async function main() {
     });
 
     const tablePredictor = await prisma.game.upsert({
-        where: { slug: 'premier-league-table-predictor' },
+        where: { slug: 'table-predictor' },
         update: {},
         create: {
             name: 'Premier League Table Predictor',
-            slug: 'premier-league-table-predictor',
+            slug: 'table-predictor',
             description:
                 'Arrange all 20 Premier League teams in the order you predict the table will finish at the end of the season. Predict the total number of goals scored in the Premier League season by all teams combined for tie-breaking.'
         }
@@ -48,7 +71,7 @@ async function main() {
         }
     });
 
-    console.log({ lastManStanding, tablePredictor, weeklyScorePredictor, raceTo33 });
+    console.log('Created Games:', { lastManStanding, tablePredictor, weeklyScorePredictor, raceTo33 });
 
     // Seed a dummy Premier League, Season, and Round for testing LMS picks
     const premierLeague = await prisma.league.upsert({
@@ -85,7 +108,7 @@ async function main() {
         }
     });
 
-    console.log({ premierLeague, plSeason, dummyRound });
+    console.log('Created SportMonks Data:', { premierLeague, plSeason, dummyRound });
 
     // Example: Create a game instance for Last Man Standing
     const now = new Date();
@@ -107,7 +130,25 @@ async function main() {
         }
     });
 
-    console.log({ lmsInstance });
+    console.log('Created LMS Instance:', { lmsInstance });
+
+    // Example: Create a game instance for Table Predictor
+    const tablePredictorInstance = await prisma.gameInstance.upsert({
+        where: { id: 'table-predictor-aug-2025' }, // Fixed ID for upsert
+        update: {},
+        create: {
+            id: 'table-predictor-aug-2025',
+            gameId: tablePredictor.id,
+            name: 'Premier League Table Predictor - August 2025',
+            startDate: now,
+            endDate: nextMonth,
+            status: 'PENDING',
+            entryFee: 500, // £5.00
+            prizePool: 0
+        }
+    });
+
+    console.log('Created Table Predictor Instance:', { tablePredictorInstance });
 }
 
 main()
