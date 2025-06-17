@@ -14,7 +14,9 @@
         "db:migrate": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" npx prisma migrate dev --name add_hashed_password",
         "db:migrate-dev": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" npx prisma migrate dev",
         "db:reset": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" npx prisma migrate reset",
-        "db:seed-admin": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" node prisma/seed-admin.js"
+        "db:seed-admin": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" node prisma/seed-admin.js",
+        "db:seed": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" node prisma/seed.js",
+        "db:check": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" node prisma/check-db.js"
     },
     "dependencies": {
         "@auth/prisma-adapter": "^2.9.1",
