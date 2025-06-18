@@ -56,10 +56,11 @@ export async function POST(request: Request) {
         }
 
         // 3. Check if the picked team has been used before in this game instance (LMS rule)
+        // New rule: A team, once picked in a game instance, cannot be picked again, regardless of outcome.
         const previousPicks = await prisma.lastManStandingPick.findMany({
             where: {
-                userGameEntryId: userGameEntry.id,
-                isCorrect: true // Only consider correct picks for reuse check
+                userGameEntryId: userGameEntry.id
+                // Removed isCorrect: true, as any previous pick makes the team ineligible
             },
             select: {
                 pickedTeamId: true
@@ -69,8 +70,8 @@ export async function POST(request: Request) {
         const usedTeamIds = previousPicks.map((pick) => pick.pickedTeamId);
         if (usedTeamIds.includes(String(pickedTeamId))) {
             return NextResponse.json(
-                { message: 'You cannot pick a team you have already used and won with in this game cycle.' },
-                { status: 403 }
+                { message: 'You have already picked this team in this game cycle.' },
+                { status: 403 } // 403 Forbidden or 409 Conflict could be appropriate
             );
         }
 
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
         await prisma.lastManStandingPick.create({
             data: {
                 userGameEntryId: userGameEntry.id,
-                roundId: 'cmc0kzbgu0008lojo8utb6pzd', // Use the actual dummy round ID
+                roundId: roundId, // Use the dynamic roundId from the request
                 pickedTeamId: String(pickedTeamId)
                 // isCorrect will be determined by a background job later
             }

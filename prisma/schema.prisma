@@ -190,7 +190,7 @@ model RaceTo33Assignment {
   id              String        @id @default(cuid())
   userGameEntryId String        @unique
   userGameEntry   UserGameEntry @relation(fields: [userGameEntryId], references: [id])
-  assignedTeamIds String[] // Array of 4 SportMonks Team IDs
+  assignedTeamIds String[] // Array of 4 SportMonks Team IDs (stored as strings)
   cumulativeGoals Int           @default(0)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt

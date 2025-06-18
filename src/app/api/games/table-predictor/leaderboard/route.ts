@@ -1,8 +1,21 @@
 import { NextResponse } from 'next/server';
 
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { Role } from '@/generated/prisma';
+// Assuming this is the correct path
 import prisma from '@/lib/prisma';
 
+import { getServerSession } from 'next-auth/next';
+
+// Import Role enum if not already globally available via Prisma client
+
 export async function GET(request: Request) {
+    const session = await getServerSession(authOptions);
+    const isAdmin = session?.user?.role === Role.ADMIN;
+
+    // Access is now public, but data shown depends on role
+    // The admin check will be used later to format the response
+
     const { searchParams } = new URL(request.url);
     const gameInstanceId = searchParams.get('gameInstanceId');
 
@@ -42,15 +55,25 @@ export async function GET(request: Request) {
             }
         });
 
-        // Format the output for the leaderboard
-        const formattedLeaderboard = leaderboardEntries.map((entry) => ({
-            predictionId: entry.id,
-            userId: entry.userGameEntry.user.id,
-            userName: entry.userGameEntry.user.name || entry.userGameEntry.user.username || 'Anonymous',
-            score: entry.score,
-            predictedOrder: entry.predictedOrder,
-            predictedTotalGoals: entry.predictedTotalGoals
-        }));
+        // Format the output for the leaderboard based on user role
+        const formattedLeaderboard = leaderboardEntries.map((entry) => {
+            const baseEntry = {
+                predictionId: entry.id, // Useful for keys in UI
+                userId: entry.userGameEntry.user.id,
+                userName: entry.userGameEntry.user.name || entry.userGameEntry.user.username || 'Anonymous',
+                score: entry.score
+            };
+
+            if (isAdmin) {
+                return {
+                    ...baseEntry,
+                    predictedOrder: entry.predictedOrder,
+                    predictedTotalGoals: entry.predictedTotalGoals
+                };
+            }
+            // For non-admins, only return anonymized data (user and score)
+            return baseEntry;
+        });
 
         return NextResponse.json(formattedLeaderboard, { status: 200 });
     } catch (error) {

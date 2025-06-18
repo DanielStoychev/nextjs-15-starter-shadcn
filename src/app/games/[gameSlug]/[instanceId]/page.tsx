@@ -3,8 +3,12 @@ import { notFound } from 'next/navigation';
 import { GameRulesButton } from '@/components/game-rules-button';
 import { LastManStandingGame } from '@/components/last-man-standing-game';
 import { LastManStandingLeaderboard } from '@/components/last-man-standing-leaderboard';
+import { RaceTo33Game } from '@/components/race-to-33-game';
+import { RaceTo33Leaderboard } from '@/components/race-to-33-leaderboard';
 import TablePredictorGame from '@/components/table-predictor-game';
 import TablePredictorLeaderboard from '@/components/table-predictor-leaderboard';
+import WeeklyScorePredictorGame from '@/components/weekly-score-predictor-game';
+import WeeklyScorePredictorLeaderboard from '@/components/weekly-score-predictor-leaderboard';
 import { Game, GameInstance } from '@/generated/prisma';
 import prisma from '@/lib/prisma';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/registry/new-york-v4/ui/card';
@@ -74,7 +78,23 @@ export default async function GamePage({ params }: GamePageProps) {
 
     const game = gameInstance.game; // Access the related Game model
 
-    const currentRoundId: string | null = 'cmc0kzbgu0008lojo8utb6pzd'; // Use the actual dummy round ID
+    // Fetch the dummy round ID from the database for Last Man Standing
+    let lmsCurrentRoundId: string | null = null;
+    if (game.slug === 'last-man-standing') {
+        const dummyRoundFromDb = await prisma.round.findUnique({
+            where: { sportMonksId: 123456789 }, // As defined in seed.js
+            select: { id: true }
+        });
+        if (dummyRoundFromDb) {
+            lmsCurrentRoundId = dummyRoundFromDb.id;
+        } else {
+            console.error('Dummy round (sportMonksId: 123456789) not found in DB for LMS game page.');
+            // Fallback or error handling - for now, it might proceed with null, causing issues in LMS
+        }
+    }
+    // For other games, currentRoundId might be determined differently or not applicable in this simplified context
+    const currentRoundIdToPass = game.slug === 'last-man-standing' ? lmsCurrentRoundId : 'cmc0kzbgu0008lojo8utb6pzd'; // Default for other games if needed, or make specific
+
     const fixtures: SportMonksFixture[] = [
         {
             id: 1001,
@@ -142,6 +162,27 @@ export default async function GamePage({ params }: GamePageProps) {
         { id: 'team-sunderland', name: 'Sunderland', logoPath: '/images/teams/sunderland.png' }
     ];
 
+    const dummyWeeklyFixtures = [
+        {
+            id: 'fixture-1',
+            homeTeam: { id: 'team-arsenal', name: 'Arsenal', logoPath: '/images/teams/arsenal.png' },
+            awayTeam: { id: 'team-chelsea', name: 'Chelsea', logoPath: '/images/teams/chelsea.png' },
+            matchDate: new Date(Date.now() + 86400000).toISOString() // Tomorrow
+        },
+        {
+            id: 'fixture-2',
+            homeTeam: { id: 'team-liverpool', name: 'Liverpool', logoPath: '/images/teams/liverpool.png' },
+            awayTeam: { id: 'team-man-utd', name: 'Man Utd', logoPath: '/images/teams/man_utd.png' },
+            matchDate: new Date(Date.now() + 172800000).toISOString() // Day after tomorrow
+        },
+        {
+            id: 'fixture-3',
+            homeTeam: { id: 'team-tottenham', name: 'Tottenham', logoPath: '/images/teams/tottenham.png' },
+            awayTeam: { id: 'team-newcastle', name: 'Newcastle', logoPath: '/images/teams/newcastle.png' },
+            matchDate: new Date(Date.now() + 259200000).toISOString() // 3 days from now
+        }
+    ];
+
     return (
         <div className='container mx-auto py-8'>
             <div className='mb-8 flex items-center justify-between'>
@@ -186,7 +227,7 @@ export default async function GamePage({ params }: GamePageProps) {
                 <LastManStandingGame
                     gameInstance={gameInstance}
                     fixtures={fixtures}
-                    currentRoundId={currentRoundId}
+                    currentRoundId={currentRoundIdToPass} // Use the fetched or fallback ID
                     isSeasonFinished={isSeasonFinished}
                 />
             )}
@@ -204,6 +245,25 @@ export default async function GamePage({ params }: GamePageProps) {
             {game.slug === 'table-predictor' && (
                 <div className='mt-8'>
                     <TablePredictorLeaderboard gameInstanceId={gameInstance.id} teams={dummyTeams} />
+                </div>
+            )}
+
+            {game.slug === 'weekly-score-predictor' && (
+                <WeeklyScorePredictorGame gameInstanceId={gameInstance.id} initialFixtures={dummyWeeklyFixtures} />
+            )}
+
+            {game.slug === 'weekly-score-predictor' && (
+                <div className='mt-8'>
+                    <WeeklyScorePredictorLeaderboard gameInstanceId={gameInstance.id} />
+                    {/* fixtures prop removed as it's no longer accepted by the component */}
+                </div>
+            )}
+
+            {game.slug === 'race-to-33' && <RaceTo33Game gameInstanceId={gameInstance.id} />}
+
+            {game.slug === 'race-to-33' && (
+                <div className='mt-8'>
+                    <RaceTo33Leaderboard gameInstanceId={gameInstance.id} />
                 </div>
             )}
         </div>

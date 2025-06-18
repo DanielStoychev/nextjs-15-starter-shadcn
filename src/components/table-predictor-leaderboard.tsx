@@ -12,8 +12,8 @@ interface LeaderboardEntry {
     userId: string;
     userName: string;
     score: number | null;
-    predictedOrder: string[]; // Array of team IDs
-    predictedTotalGoals: number;
+    predictedOrder?: string[]; // Array of team IDs - now optional
+    predictedTotalGoals?: number; // Now optional
 }
 
 interface TablePredictorLeaderboardProps {
@@ -32,9 +32,12 @@ const TablePredictorLeaderboard: React.FC<TablePredictorLeaderboardProps> = ({ g
         const fetchLeaderboard = async () => {
             try {
                 setIsLoading(true);
+                setError(null); // Reset error state on new fetch
                 const response = await fetch(`/api/games/table-predictor/leaderboard?gameInstanceId=${gameInstanceId}`);
+                // Removed 403 specific error throw, API now returns different data shapes
                 if (!response.ok) {
-                    throw new Error('Failed to fetch leaderboard data.');
+                    const errorData = await response.json().catch(() => ({})); // Try to parse error, default if fails
+                    throw new Error(errorData.message || 'Failed to fetch leaderboard data.');
                 }
                 const data: LeaderboardEntry[] = await response.json();
                 setLeaderboard(data);
@@ -55,6 +58,8 @@ const TablePredictorLeaderboard: React.FC<TablePredictorLeaderboardProps> = ({ g
 
         return team ? team.name : `Unknown Team (${teamId})`;
     };
+
+    const showDetailedView = leaderboard.length > 0 && leaderboard[0].predictedOrder !== undefined;
 
     return (
         <Card className='mx-auto my-8 w-full max-w-4xl'>
@@ -77,8 +82,8 @@ const TablePredictorLeaderboard: React.FC<TablePredictorLeaderboardProps> = ({ g
                                     <TableHead className='w-[50px]'>Rank</TableHead>
                                     <TableHead>Player</TableHead>
                                     <TableHead>Score</TableHead>
-                                    <TableHead>Predicted Order</TableHead>
-                                    <TableHead>Predicted Goals</TableHead>
+                                    {showDetailedView && <TableHead>Predicted Order</TableHead>}
+                                    {showDetailedView && <TableHead>Predicted Goals</TableHead>}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -87,18 +92,20 @@ const TablePredictorLeaderboard: React.FC<TablePredictorLeaderboardProps> = ({ g
                                         <TableCell className='font-medium'>{index + 1}</TableCell>
                                         <TableCell>{entry.userName}</TableCell>
                                         <TableCell>{entry.score !== null ? entry.score : 'N/A'}</TableCell>
-                                        <TableCell>
-                                            <div className='flex flex-wrap gap-1'>
-                                                {entry.predictedOrder.map((teamId, idx) => (
-                                                    <span
-                                                        key={idx}
-                                                        className='bg-secondary rounded-full px-2 py-1 text-xs'>
-                                                        {getTeamName(teamId)}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>{entry.predictedTotalGoals}</TableCell>
+                                        {showDetailedView && (
+                                            <TableCell>
+                                                <div className='flex flex-wrap gap-1'>
+                                                    {entry.predictedOrder?.map((teamId, idx) => (
+                                                        <span
+                                                            key={idx}
+                                                            className='bg-secondary rounded-full px-2 py-1 text-xs'>
+                                                            {getTeamName(teamId)}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </TableCell>
+                                        )}
+                                        {showDetailedView && <TableCell>{entry.predictedTotalGoals}</TableCell>}
                                     </TableRow>
                                 ))}
                             </TableBody>

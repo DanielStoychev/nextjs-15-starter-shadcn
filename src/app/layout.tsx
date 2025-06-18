@@ -3,12 +3,15 @@ import type { ReactNode } from 'react';
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 
-import { ThemeProvider } from 'next-themes';
+// Import AppFooter
+import '@/app/globals.css';
+// Import AppHeader
+import { AppFooter } from '@/components/app-footer';
+import AppHeader from '@/components/app-header';
+// Changed to local ThemeProvider
 
 import { AuthProvider } from '@/components/auth-provider';
-import AppHeader from '@/components/app-header'; // Import AppHeader
-import { AppFooter } from '@/components/app-footer'; // Import AppFooter
-import '@/app/globals.css';
+import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/registry/new-york-v4/ui/sonner';
 
 const geistSans = localFont({
@@ -25,16 +28,26 @@ const geistMono = localFont({
 export const metadata: Metadata = {
     title: {
         default: 'FootyGames.co.uk - Premier League Mini-Competitions',
-        template: '%s | FootyGames.co.uk',
+        template: '%s | FootyGames.co.uk'
     },
-    description: 'Your ultimate destination for Premier League mini-competitions. Pay a small entry fee, compete, and win big cash prizes!',
-    keywords: ['football', 'premier league', 'mini-competitions', 'fantasy football', 'predictions', 'cash prizes', 'online games'],
+    description:
+        'Your ultimate destination for Premier League mini-competitions. Pay a small entry fee, compete, and win big cash prizes!',
+    keywords: [
+        'football',
+        'premier league',
+        'mini-competitions',
+        'fantasy football',
+        'predictions',
+        'cash prizes',
+        'online games'
+    ],
     authors: [{ name: 'FootyGames.co.uk Team' }],
     creator: 'FootyGames.co.uk Team',
     publisher: 'FootyGames.co.uk',
     openGraph: {
         title: 'FootyGames.co.uk - Premier League Mini-Competitions',
-        description: 'Your ultimate destination for Premier League mini-competitions. Pay a small entry fee, compete, and win big cash prizes!',
+        description:
+            'Your ultimate destination for Premier League mini-competitions. Pay a small entry fee, compete, and win big cash prizes!',
         url: 'https://footygames.co.uk',
         siteName: 'FootyGames.co.uk',
         images: [
@@ -42,17 +55,18 @@ export const metadata: Metadata = {
                 url: 'https://footygames.co.uk/logo.png', // Replace with actual logo path
                 width: 800,
                 height: 600,
-                alt: 'FootyGames.co.uk Logo',
-            },
+                alt: 'FootyGames.co.uk Logo'
+            }
         ],
         locale: 'en_GB',
-        type: 'website',
+        type: 'website'
     },
     twitter: {
         card: 'summary_large_image',
         title: 'FootyGames.co.uk - Premier League Mini-Competitions',
-        description: 'Your ultimate destination for Premier League mini-competitions. Pay a small entry fee, compete, and win big cash prizes!',
-        images: ['https://footygames.co.uk/logo.png'], // Replace with actual logo path
+        description:
+            'Your ultimate destination for Premier League mini-competitions. Pay a small entry fee, compete, and win big cash prizes!',
+        images: ['https://footygames.co.uk/logo.png'] // Replace with actual logo path
     },
     robots: {
         index: true,
@@ -62,15 +76,15 @@ export const metadata: Metadata = {
             follow: true,
             'max-video-preview': -1,
             'max-image-preview': 'large',
-            'max-snippet': -1,
-        },
+            'max-snippet': -1
+        }
     },
     icons: {
         icon: '/favicon.ico',
         shortcut: '/favicon.ico',
-        apple: '/favicon.ico',
+        apple: '/favicon.ico'
     },
-    manifest: '/site.webmanifest', // You might need to create this file
+    manifest: '/site.webmanifest' // You might need to create this file
 };
 
 const Layout = ({ children }: Readonly<{ children: ReactNode }>) => {
