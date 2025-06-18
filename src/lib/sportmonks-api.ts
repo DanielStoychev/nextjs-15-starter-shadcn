@@ -36,6 +36,7 @@ async function fetchSportMonks<T>(
             url.searchParams.append(key, String(params[key]));
         }
     }
+    console.log('[SportMonks API] Fetching URL:', url.toString()); // Added log
 
     try {
         const response = await fetch(url.toString());
@@ -73,19 +74,35 @@ export const getLeaguesByCountry = async (countryId: number, include?: string): 
 
 // Seasons
 export const getSeasonRounds = async (seasonId: number, include?: string): Promise<any> => {
-    return fetchSportMonks(`/rounds/season/${seasonId}`, { include });
+    // Corrected endpoint based on user-provided documentation
+    return fetchSportMonks(`/rounds/seasons/${seasonId}`, { include });
 };
 
 export const getSeasonTeams = async (seasonId: number, include?: string): Promise<any> => {
     return fetchSportMonks(`/teams/season/${seasonId}`, { include });
 };
 
+export const getSeasonDetails = async (seasonId: number, include?: string): Promise<any> => {
+    return fetchSportMonks(`/seasons/${seasonId}`, { include });
+};
+
 // Rounds
-export const getRoundFixtures = async (roundId: number, include?: string): Promise<any> => {
-    return fetchSportMonks(`/fixtures/round/${roundId}`, { include });
+export const getRoundFixtures = async (roundId: number): Promise<any> => {
+    // Fetches a specific round by its ID and includes its fixtures.
+    // Further details like participants and scores for these fixtures will be fetched separately.
+    const includeParams = 'fixtures';
+    console.log(`getRoundFixtures: Fetching round ${roundId} with include: ${includeParams}`);
+
+    return fetchSportMonks(`/rounds/${roundId}`, { include: includeParams });
 };
 
 // Fixtures
+export const getFixturesDetailsByIds = async (fixtureIdsCommaSeparated: string, include?: string): Promise<any> => {
+    console.log(`getFixturesDetailsByIds: Fetching fixtures ${fixtureIdsCommaSeparated} with include: ${include}`);
+
+    return fetchSportMonks(`/fixtures/multi/${fixtureIdsCommaSeparated}`, { include });
+};
+
 export const getFixturesByDateRange = async (
     startDate: string,
     endDate: string,

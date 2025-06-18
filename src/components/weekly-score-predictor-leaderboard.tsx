@@ -80,8 +80,7 @@ const WeeklyScorePredictorLeaderboard: React.FC<WeeklyScorePredictorLeaderboardP
                             <TableBody>
                                 {leaderboard.map((entry, index) => (
                                     <TableRow key={entry.userId}>
-                                        {' '}
-                                        {/* Use userId as key, assuming it's unique per entry */}
+                                        {/* Removed whitespace text node and comment from here */}
                                         <TableCell className='font-medium'>{index + 1}</TableCell>
                                         <TableCell>{entry.userName}</TableCell>
                                         <TableCell>{entry.totalPoints}</TableCell>

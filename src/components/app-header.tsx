@@ -57,6 +57,13 @@ export default function AppHeader() {
                                 </Link>
                             </NavigationMenuLink>
                         </NavigationMenuItem>
+                        <NavigationMenuItem>
+                            <NavigationMenuLink asChild data-active={pathname === '/games'}>
+                                <Link href='/games' className='text-foreground hover:text-accent-orange'>
+                                    Games
+                                </Link>
+                            </NavigationMenuLink>
+                        </NavigationMenuItem>
                         {session && (
                             <NavigationMenuItem>
                                 <NavigationMenuLink asChild data-active={pathname === '/dashboard'}>
@@ -142,6 +149,11 @@ export default function AppHeader() {
                                 </Link>
                                 <Link href='/' className='text-foreground hover:text-accent-orange text-lg font-medium'>
                                     Home
+                                </Link>
+                                <Link
+                                    href='/games'
+                                    className='text-foreground hover:text-accent-orange text-lg font-medium'>
+                                    Games
                                 </Link>
                                 {session && (
                                     <Link

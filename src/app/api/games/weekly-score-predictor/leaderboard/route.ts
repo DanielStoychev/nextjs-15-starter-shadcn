@@ -32,10 +32,10 @@ export async function GET(request: Request) {
                 weeklyScorePredictions: {
                     select: {
                         pointsAwarded: true
-                    },
-                    where: {
-                        pointsAwarded: { not: null } // Only sum scored predictions
                     }
+                    // The 'where' clause that filtered for 'pointsAwarded: { not: null }' has been removed
+                    // to ensure all predictions are counted for numberOfPredictions.
+                    // Total points will still be calculated based on actual pointsAwarded.
                 }
             }
         });
