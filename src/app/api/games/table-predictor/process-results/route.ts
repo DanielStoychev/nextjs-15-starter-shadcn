@@ -213,6 +213,12 @@ export async function POST(request: Request) {
 
         await Promise.all(updatePromises);
 
+        // After all scores are updated, mark the GameInstance as COMPLETED
+        await prisma.gameInstance.update({
+            where: { id: gameInstanceId },
+            data: { status: 'COMPLETED' }
+        });
+
         // Tie-breaking (using actualTotalGoals and prediction.predictedTotalGoals)
         // is handled when determining the final winner from the leaderboard, not by modifying the stored 'score'.
         // The 'actualTotalGoals' fetched here would be passed to that separate winner determination logic.

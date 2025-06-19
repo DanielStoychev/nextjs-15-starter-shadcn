@@ -15,7 +15,7 @@
         "db:migrate-dev": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" npx prisma migrate dev",
         "db:reset": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" npx prisma migrate reset",
         "db:seed-admin": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" node prisma/seed-admin.js",
-        "db:seed": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" node prisma/seed.js",
+        "db:seed": "cross-env dotenv_config_path=.env.local DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" tsx -r dotenv/config prisma/seed.ts",
         "db:check": "cross-env DATABASE_URL=\"postgresql://footyuser:footypassword@localhost:5432/footygamesdb?schema=public\" node prisma/check-db.js"
     },
     "dependencies": {
@@ -111,6 +111,7 @@
         "tailwindcss": "^4.1.10",
         "tailwindcss-animate": "^1.0.7",
         "ts-node": "^10.9.2",
+        "tsconfig-paths": "^4.2.0",
         "tsx": "^4.20.3",
         "typescript": "^5.8.3",
         "typescript-eslint": "^8.34.0"

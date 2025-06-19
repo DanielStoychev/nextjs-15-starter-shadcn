@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { Role } from '@/generated/prisma';
+// Import GameStatus
 // Assuming this is the correct path
 import prisma from '@/lib/prisma';
+import { GameStatus, Role } from '@prisma/client';
 
 import { getServerSession } from 'next-auth/next';
 
@@ -24,6 +25,28 @@ export async function GET(request: Request) {
     }
 
     try {
+        // Fetch the GameInstance to check its status
+        const gameInstance = await prisma.gameInstance.findUnique({
+            where: { id: gameInstanceId },
+            select: { status: true }
+        });
+
+        if (!gameInstance) {
+            return NextResponse.json({ message: 'Game instance not found' }, { status: 404 });
+        }
+
+        if (gameInstance.status !== GameStatus.COMPLETED) {
+            return NextResponse.json(
+                {
+                    message:
+                        'Leaderboard is not available until the game instance is completed and results are processed.',
+                    leaderboard: [] // Return empty leaderboard
+                },
+                { status: 200 } // Or use a different status like 202 Accepted or 403 Forbidden if preferred
+            );
+        }
+
+        // Proceed to fetch leaderboard entries only if gameInstance is COMPLETED
         const leaderboardEntries = await prisma.tablePredictorPrediction.findMany({
             where: {
                 userGameEntry: {

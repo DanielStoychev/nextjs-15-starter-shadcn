@@ -39,8 +39,15 @@ const TablePredictorLeaderboard: React.FC<TablePredictorLeaderboardProps> = ({ g
                     const errorData = await response.json().catch(() => ({})); // Try to parse error, default if fails
                     throw new Error(errorData.message || 'Failed to fetch leaderboard data.');
                 }
-                const data: LeaderboardEntry[] = await response.json();
-                setLeaderboard(data);
+                const responseData = await response.json();
+
+                // Check if the API indicates the leaderboard is not yet available
+                if (responseData.message && responseData.leaderboard && responseData.leaderboard.length === 0) {
+                    setError(responseData.message); // Use the message from the API
+                    setLeaderboard([]);
+                } else {
+                    setLeaderboard(responseData.leaderboard || responseData); // Handle if API returns array directly or nested
+                }
             } catch (err) {
                 console.error('Error fetching leaderboard:', err);
                 setError((err as Error).message);
@@ -71,9 +78,13 @@ const TablePredictorLeaderboard: React.FC<TablePredictorLeaderboardProps> = ({ g
                 {isLoading ? (
                     <div className='p-4 text-center'>Loading leaderboard...</div>
                 ) : error ? (
-                    <div className='text-destructive p-4 text-center'>{error}</div>
+                    // Display the error message (which might be the "not available yet" message)
+                    <div className='text-muted-foreground p-4 text-center'>{error}</div>
                 ) : leaderboard.length === 0 ? (
-                    <div className='text-muted-foreground p-4 text-center'>No predictions submitted yet.</div>
+                    // This case might be redundant if 'error' state now handles the "not available" message
+                    <div className='text-muted-foreground p-4 text-center'>
+                        No predictions submitted or leaderboard not yet available.
+                    </div>
                 ) : (
                     <div className='overflow-x-auto'>
                         <Table>
