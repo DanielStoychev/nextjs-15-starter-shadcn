@@ -50,6 +50,10 @@ export function LastManStandingGame({
     const [formattedDates, setFormattedDates] = useState<Record<number, string>>({});
     const [previouslyPickedTeamIds, setPreviouslyPickedTeamIds] = useState<string[]>([]);
     const [isLoadingPicks, setIsLoadingPicks] = useState<boolean>(true);
+    const [pickPercentages, setPickPercentages] = useState<
+        Array<{ teamId: string; teamName: string; percentage: number }>
+    >([]);
+    const [isLoadingPercentages, setIsLoadingPercentages] = useState<boolean>(false);
 
     useEffect(() => {
         // Fetch previously picked teams by the user for this game instance
@@ -81,6 +85,40 @@ export function LastManStandingGame({
 
         fetchPickedTeams();
     }, [session, gameInstance.id]);
+
+    useEffect(() => {
+        // Fetch pick percentages for the current round
+        const fetchPickPercentages = async () => {
+            if (currentRoundId && gameInstance.id) {
+                setIsLoadingPercentages(true);
+                try {
+                    const response = await fetch(
+                        `/api/games/last-man-standing/pick-percentages?roundId=${currentRoundId}&gameInstanceId=${gameInstance.id}`
+                    );
+                    if (response.ok) {
+                        const data = await response.json();
+                        setPickPercentages(data.percentages || []);
+                    } else {
+                        console.error('Failed to fetch pick percentages');
+                        setPickPercentages([]);
+                    }
+                } catch (error) {
+                    console.error('Error fetching pick percentages:', error);
+                    setPickPercentages([]);
+                } finally {
+                    setIsLoadingPercentages(false);
+                }
+            } else {
+                setPickPercentages([]);
+            }
+        };
+
+        // Only fetch percentages if currentRoundId and gameInstance.id are available
+        // Add condition here if percentages should only be shown when "in play"
+        if (currentRoundId && gameInstance.id) {
+            fetchPickPercentages();
+        }
+    }, [currentRoundId, gameInstance.id]);
 
     useEffect(() => {
         // Format dates on the client side after hydration
@@ -177,6 +215,9 @@ export function LastManStandingGame({
                             <div className='mt-4 flex justify-around'>
                                 {fixture.participants.map((participant) => {
                                     const isTeamDisabled = previouslyPickedTeamIds.includes(String(participant.id));
+                                    const percentageData = pickPercentages.find(
+                                        (p) => p.teamId === String(participant.id)
+                                    );
 
                                     return (
                                         <div
@@ -203,6 +244,11 @@ export function LastManStandingGame({
                                                 />
                                             )}
                                             <span>{participant.name}</span>
+                                            {percentageData && (
+                                                <span className='text-muted-foreground mt-1 text-xs'>
+                                                    ({percentageData.percentage}%)
+                                                </span>
+                                            )}
                                         </div>
                                     );
                                 })}

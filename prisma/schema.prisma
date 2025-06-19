@@ -115,8 +115,11 @@ model GameInstance {
   prizePool   Int            @default(0) // In cents
   entryFee    Int            @default(0) // In cents
   userEntries UserGameEntry[]
-  // Specific fields for game types can be added here or in related models
-  // For LMS: currentRoundId, lastEliminationRoundId, etc.
+  
+  // For games with custom duration (e.g., LMS, WSP running for N rounds)
+  numberOfRounds      Int?     // Admin-defined number of rounds for this instance
+  instanceRoundCUIDs  String[] // Array of local Round CUIDs this instance spans
+  // For LMS: currentRoundId, lastEliminationRoundId, etc. could still be useful for specific state tracking
   // For Race to 33: targetGoals (e.g., 33)
 }
 
