@@ -17,7 +17,9 @@ import {
     getRoundFixtures,
     getSeasonDetails,
     getSeasonRounds,
-    getSeasonTeams
+    getSeasonStandings,
+    getSeasonTeams,
+    searchTeamByName // Added searchTeamByName
 } from '@/lib/sportmonks-api';
 // Import SportMonks functions
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/registry/new-york-v4/ui/card';
@@ -213,116 +215,133 @@ export default async function GamePage({ params }: GamePageProps) {
     const fixturesToPass = game.slug === 'last-man-standing' ? liveFixtures : [];
     const currentRoundIdToPass = game.slug === 'last-man-standing' ? liveLmsCurrentRoundDbId : null;
 
-    let tablePredictorTeams: Array<{ id: number; name: string; image_path: string }> = [];
+    let tablePredictorTeams: Array<{ id: number; name: string; image_path: string; country_id?: number }> = [];
     if (game.slug === 'table-predictor') {
+        // Manual list for Premier League 2025/2026 with corrected IDs and image_paths
+        const premierLeague2025_2026_Teams_Data = [
+            { id: 19, name: 'Arsenal', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/19/19.png' },
+            { id: 15, name: 'Aston Villa', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/15/15.png' },
+            { id: 52, name: 'AFC Bournemouth', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/20/52.png' },
+            { id: 236, name: 'Brentford', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/12/236.png' },
+            {
+                id: 78,
+                name: 'Brighton & Hove Albion',
+                image_path: 'https://cdn.sportmonks.com/images/soccer/teams/14/78.png'
+            },
+            { id: 27, name: 'Burnley', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/27/27.png' }, // Promoted
+            { id: 18, name: 'Chelsea', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/18/18.png' },
+            { id: 51, name: 'Crystal Palace', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/19/51.png' },
+            { id: 13, name: 'Everton', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/13/13.png' },
+            { id: 11, name: 'Fulham', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/11/11.png' },
+            { id: 71, name: 'Leeds United', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/7/71.png' }, // Promoted
+            { id: 8, name: 'Liverpool', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/8/8.png' },
+            { id: 9, name: 'Manchester City', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/9/9.png' },
+            {
+                id: 14,
+                name: 'Manchester United',
+                image_path: 'https://cdn.sportmonks.com/images/soccer/teams/14/14.png'
+            },
+            {
+                id: 20,
+                name: 'Newcastle United',
+                image_path: 'https://cdn.sportmonks.com/images/soccer/teams/20/20.png'
+            },
+            {
+                id: 63,
+                name: 'Nottingham Forest',
+                image_path: 'https://cdn.sportmonks.com/images/soccer/teams/31/63.png'
+            },
+            { id: 3, name: 'Sunderland', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/3/3.png' }, // Promoted
+            { id: 6, name: 'Tottenham Hotspur', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/6/6.png' },
+            { id: 1, name: 'West Ham United', image_path: 'https://cdn.sportmonks.com/images/soccer/teams/1/1.png' },
+            {
+                id: 29,
+                name: 'Wolverhampton Wanderers',
+                image_path: 'https://cdn.sportmonks.com/images/soccer/teams/29/29.png'
+            }
+        ];
+
+        tablePredictorTeams = premierLeague2025_2026_Teams_Data.map((team) => ({
+            id: team.id,
+            name: team.name,
+            image_path: team.image_path
+            // country_id is not strictly needed for display here, and was causing Prisma issues
+        }));
+        console.log(
+            `[Table Predictor] Using statically defined list of ${tablePredictorTeams.length} teams for 2025/2026 season.`
+        );
+
+        // Optional: Still attempt to fetch currentSeasonData for potential use elsewhere or for logging
         try {
             const leagueDetailsResponse = await getLeagueDetails(PREMIER_LEAGUE_ID, 'currentSeason');
             const currentSeasonData = leagueDetailsResponse.data?.currentseason;
+            console.log(
+                '[Table Predictor] currentSeasonData (for context):',
+                JSON.stringify(currentSeasonData, null, 2)
+            );
 
-            console.log('[Table Predictor] currentSeasonData:', JSON.stringify(currentSeasonData, null, 2));
-            if (currentSeasonData && currentSeasonData.id) {
-                console.log(
-                    `[Table Predictor] Attempting to fetch season details with teams for season ID: ${currentSeasonData.id}`
-                );
-                // Use getSeasonDetails with 'teams' include
-                const seasonDetailsResponse = await getSeasonDetails(currentSeasonData.id, 'teams');
-                console.log('[Table Predictor] seasonDetailsResponse:', JSON.stringify(seasonDetailsResponse, null, 2));
+            // Upsert logic for these static teams (ensure they exist in DB for relations)
+            // This part might need adjustment if currentSeasonData.id is not 25583
+            // or if dbLeagueTP/dbSeasonTP logic needs to be more robust for static list
+            if (currentSeasonData && currentSeasonData.id === 25583) {
+                // Only upsert if context matches
+                for (const team of tablePredictorTeams) {
+                    let dbLeagueTP = await prisma.league.findUnique({ where: { sportMonksId: PREMIER_LEAGUE_ID } });
+                    if (!dbLeagueTP && leagueDetailsResponse.data?.country_id && leagueDetailsResponse.data?.name) {
+                        dbLeagueTP = await prisma.league.create({
+                            data: {
+                                sportMonksId: PREMIER_LEAGUE_ID,
+                                name: leagueDetailsResponse.data.name,
+                                countryId: leagueDetailsResponse.data.country_id
+                            }
+                        });
+                    }
 
-                // Assuming teams are nested under seasonDetailsResponse.data.teams
-                // Adjust based on actual response structure logged above
-                const teamsData = seasonDetailsResponse?.data?.teams;
-
-                if (teamsData && Array.isArray(teamsData)) {
-                    tablePredictorTeams = teamsData.map((apiTeam: any) => ({
-                        id: apiTeam.id,
-                        name: apiTeam.name,
-                        image_path: apiTeam.image_path
-                        // country_id is not reliably provided by season.teams include
-                    }));
-
-                    // Ensure teams are stored in the local DB
-                    // This part might need adjustment based on how teams are structured in seasonDetailsResponse.data.teams
-                    // and what's needed for findOrCreateTeam or direct prisma.team.upsert
-                    for (const team of tablePredictorTeams) {
-                        // Check if league and season CUIDs are available/needed for findOrCreateTeam
-                        // For now, assuming direct upsert or that findOrCreateTeam can handle it
-                        // This might require fetching local league/season if their CUIDs are needed for Team records
-                        // and not directly available on team objects from season.teams include.
-                        // For simplicity, let's assume we'll adapt the upsert.
-                        // We need the local league and season CUIDs.
-                        // We have apiLeagueData and currentSeasonData from earlier in the main GamePage scope,
-                        // but we need their corresponding CUIDs from our DB.
-
-                        // Let's find/create the league and season in DB first to get their CUIDs
-                        let dbLeagueTP = await prisma.league.findUnique({ where: { sportMonksId: PREMIER_LEAGUE_ID } });
-                        if (!dbLeagueTP && leagueDetailsResponse.data?.country_id) {
-                            dbLeagueTP = await prisma.league.create({
+                    let dbSeasonTP = null;
+                    if (dbLeagueTP) {
+                        dbSeasonTP = await prisma.season.findUnique({
+                            where: { sportMonksId: currentSeasonData.id } // Using 25583
+                        });
+                        if (!dbSeasonTP) {
+                            dbSeasonTP = await prisma.season.create({
                                 data: {
-                                    sportMonksId: PREMIER_LEAGUE_ID,
-                                    name: leagueDetailsResponse.data.name,
-                                    countryId: leagueDetailsResponse.data.country_id
+                                    sportMonksId: currentSeasonData.id,
+                                    name: currentSeasonData.name, // Should be '2025/2026'
+                                    isCurrent: true, // As per currentSeasonData
+                                    leagueId: dbLeagueTP.id
                                 }
                             });
                         }
-
-                        let dbSeasonTP = null;
-                        if (dbLeagueTP) {
-                            dbSeasonTP = await prisma.season.findUnique({
-                                where: { sportMonksId: currentSeasonData.id }
-                            });
-                            if (!dbSeasonTP) {
-                                dbSeasonTP = await prisma.season.create({
-                                    data: {
-                                        sportMonksId: currentSeasonData.id,
-                                        name: currentSeasonData.name,
-                                        isCurrent: currentSeasonData.is_current ?? false,
-                                        leagueId: dbLeagueTP.id
-                                    }
-                                });
-                            }
-                        }
-
-                        if (dbLeagueTP && dbSeasonTP) {
-                            const teamUpsertDataUpdate: any = {
-                                name: team.name,
-                                logoPath: team.image_path,
-                                leagueId: dbLeagueTP.id,
-                                seasonId: dbSeasonTP.id
-                            };
-                            // countryId will not be set if not provided by API for season.teams include
-
-                            const teamUpsertDataCreate: any = {
-                                sportMonksId: team.id,
-                                name: team.name,
-                                logoPath: team.image_path,
-                                leagueId: dbLeagueTP.id,
-                                seasonId: dbSeasonTP.id
-                            };
-                            // countryId will not be set if not provided by API for season.teams include
-
-                            await prisma.team.upsert({
-                                where: { sportMonksId: team.id },
-                                update: teamUpsertDataUpdate,
-                                create: teamUpsertDataCreate
-                            });
-                        } else {
-                            console.error(
-                                '[Table Predictor] Could not find or create local league/season records for team upsert.'
-                            );
-                        }
                     }
-                } else {
-                    console.error(
-                        '[Table Predictor] No teams data returned from getSeasonDetails or data is not in expected array format.'
-                    );
+
+                    if (dbLeagueTP && dbSeasonTP) {
+                        const upsertData: any = {
+                            name: team.name,
+                            logoPath: team.image_path,
+                            leagueId: dbLeagueTP.id,
+                            seasonId: dbSeasonTP.id // Linking to the 2025/2026 season
+                        };
+                        await prisma.team.upsert({
+                            where: { sportMonksId: team.id },
+                            update: upsertData,
+                            create: {
+                                sportMonksId: team.id,
+                                ...upsertData
+                            }
+                        });
+                    } else {
+                        console.error(
+                            '[Table Predictor] Could not find/create local league/season for static team upsert.'
+                        );
+                    }
                 }
             } else {
-                console.error(
-                    '[Table Predictor] currentSeasonData or its ID is undefined after fetching league details.'
+                console.warn(
+                    '[Table Predictor] currentSeasonData.id is not 25583 or not available, skipping DB upsert for static teams for now.'
                 );
             }
         } catch (error) {
-            console.error('Error fetching Table Predictor teams:', error);
+            console.error('Error during static Table Predictor team setup or DB upsert:', error);
         }
     }
 
@@ -494,7 +513,8 @@ export default async function GamePage({ params }: GamePageProps) {
                     }
 
                     if (dbSeasonR33) {
-                        const teamsResponse = await getSeasonTeams(currentSeasonData.id, 'country'); // image_path is part of default Team
+                        // Corrected call to getSeasonTeams: leagueId is undefined, 'country' is include
+                        const teamsResponse = await getSeasonTeams(currentSeasonData.id, undefined, 'country');
                         if (teamsResponse && teamsResponse.data) {
                             for (const teamData of teamsResponse.data) {
                                 const dbTeam = await findOrCreateTeam(

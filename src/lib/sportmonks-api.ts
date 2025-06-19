@@ -78,8 +78,28 @@ export const getSeasonRounds = async (seasonId: number, include?: string): Promi
     return fetchSportMonks(`/rounds/seasons/${seasonId}`, { include });
 };
 
-export const getSeasonTeams = async (seasonId: number, include?: string): Promise<any> => {
-    return fetchSportMonks(`/teams/season/${seasonId}`, { include });
+// Fetches teams for a specific season using the /teams endpoint with a season_id filter.
+// Supports basic pagination parameters.
+export const getSeasonTeams = async (
+    seasonId: number,
+    leagueId?: number, // Added leagueId parameter
+    include?: string,
+    page?: number,
+    per_page?: number
+): Promise<any> => {
+    const directParams: Record<string, any> = {
+        season_id: seasonId,
+        include,
+        page,
+        per_page
+    };
+    if (leagueId !== undefined) {
+        directParams.league_id = leagueId; // Add league_id to params if provided
+    }
+    // Note: The extensive comments about filter strategy can be removed or condensed later
+    // if this direct parameter approach works consistently.
+
+    return fetchSportMonks(`/teams`, directParams);
 };
 
 export const getSeasonDetails = async (seasonId: number, include?: string): Promise<any> => {
@@ -114,6 +134,14 @@ export const getFixturesByDateRange = async (
 // Teams
 export const getTeamDetails = async (teamId: number, include?: string): Promise<any> => {
     return fetchSportMonks(`/teams/${teamId}`, { include });
+};
+
+// Search team by name
+export const searchTeamByName = async (name: string, include?: string): Promise<any> => {
+    // URL encode the search query to handle spaces and special characters
+    const encodedName = encodeURIComponent(name);
+
+    return fetchSportMonks(`/teams/search/${encodedName}`, { include });
 };
 
 // Standings
