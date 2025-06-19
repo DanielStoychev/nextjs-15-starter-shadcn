@@ -9,8 +9,7 @@ import TablePredictorGame from '@/components/table-predictor-game';
 import TablePredictorLeaderboard from '@/components/table-predictor-leaderboard';
 import WeeklyScorePredictorGame from '@/components/weekly-score-predictor-game';
 import WeeklyScorePredictorLeaderboard from '@/components/weekly-score-predictor-leaderboard';
-// Assuming GameInstance is the base model type, and Prisma namespace is available
-import { Game, Prisma, GameInstance as PrismaGameInstanceType } from '@/generated/prisma';
+// Corrected import
 import prisma from '@/lib/prisma';
 import {
     getFixturesDetailsByIds,
@@ -24,6 +23,8 @@ import {
 } from '@/lib/sportmonks-api';
 // Import SportMonks functions
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/registry/new-york-v4/ui/card';
+// Assuming GameInstance is the base model type, and Prisma namespace is available
+import { Game, League, Prisma, GameInstance as PrismaGameInstanceType, Season } from '@prisma/client';
 
 const PREMIER_LEAGUE_ID = 8;
 const CHAMPIONSHIP_ID = 9;
@@ -140,8 +141,8 @@ export default async function GamePage({ params }: GamePageProps) {
     const gameInstance: Prisma.GameInstanceGetPayload<{ include: { game: true } }> = gameInstanceData;
 
     const game = gameInstance.game;
-    // If prisma generate worked, numberOfRounds and instanceRoundCUIDs should be on gameInstance here.
-    // Force type assertion if TS server is not picking up generated types correctly.
+    // Reverting to 'as any' due to persistent TS errors, assuming fields exist at runtime.
+    // This suggests an ongoing issue with TS server/Prisma client type resolution.
     const customNumberOfRounds = (gameInstance as any).numberOfRounds as number | null | undefined;
     const instanceRoundCUIDs = (gameInstance as any).instanceRoundCUIDs as string[] | undefined;
 
@@ -152,8 +153,8 @@ export default async function GamePage({ params }: GamePageProps) {
     if (game.slug === 'last-man-standing') {
         try {
             const leagueDetailsResponse = await getLeagueDetails(PREMIER_LEAGUE_ID, 'currentSeason');
-            const apiLeagueData = leagueDetailsResponse.data as SportMonksLeague;
-            let dbLeague: any = null;
+            const apiLeagueData = leagueDetailsResponse.data as SportMonksLeague; // Consider more specific typing if possible
+            let dbLeague: League | null = null; // Use Prisma type directly
             if (apiLeagueData && apiLeagueData.id) {
                 dbLeague = await prisma.league.findUnique({ where: { sportMonksId: apiLeagueData.id } });
                 if (!dbLeague && typeof apiLeagueData.country_id === 'number') {
@@ -168,7 +169,7 @@ export default async function GamePage({ params }: GamePageProps) {
             }
 
             const currentSeasonData = apiLeagueData?.currentseason;
-            let dbSeason: any = null;
+            let dbSeason: Season | null = null; // Use Prisma type directly
             if (currentSeasonData && currentSeasonData.id && dbLeague) {
                 isSeasonFinished = currentSeasonData.finished;
                 dbSeason = await prisma.season.findUnique({ where: { sportMonksId: currentSeasonData.id } });
@@ -422,8 +423,8 @@ export default async function GamePage({ params }: GamePageProps) {
         try {
             for (const leagueId of leagueIdsForWsp) {
                 const leagueDetailsResponse = await getLeagueDetails(leagueId, 'currentSeason'); // Simplified include
-                const apiLeagueData = leagueDetailsResponse.data as SportMonksLeague;
-                let dbLeagueWsp: any = null;
+                const apiLeagueData = leagueDetailsResponse.data as SportMonksLeague; // Consider more specific typing
+                let dbLeagueWsp: League | null = null; // Use Prisma type directly
                 if (apiLeagueData && apiLeagueData.id) {
                     dbLeagueWsp = await prisma.league.findUnique({ where: { sportMonksId: apiLeagueData.id } });
                     if (!dbLeagueWsp && typeof apiLeagueData.country_id === 'number') {
@@ -438,7 +439,7 @@ export default async function GamePage({ params }: GamePageProps) {
                 }
 
                 const currentSeasonData = apiLeagueData?.currentseason;
-                let dbSeasonWsp: any = null;
+                let dbSeasonWsp: Season | null = null; // Use Prisma type directly
                 if (currentSeasonData && currentSeasonData.id && dbLeagueWsp) {
                     if (currentSeasonData.finished) continue; // Skip finished seasons
                     dbSeasonWsp = await prisma.season.findUnique({ where: { sportMonksId: currentSeasonData.id } });
@@ -552,8 +553,8 @@ export default async function GamePage({ params }: GamePageProps) {
         try {
             for (const leagueId of leagueIdsForR33) {
                 const leagueDetailsResponse = await getLeagueDetails(leagueId, 'currentSeason'); // Simplified include
-                const apiLeagueData = leagueDetailsResponse.data as SportMonksLeague;
-                let dbLeagueR33: any = null;
+                const apiLeagueData = leagueDetailsResponse.data as SportMonksLeague; // Consider more specific typing
+                let dbLeagueR33: League | null = null; // Use Prisma type directly
                 if (apiLeagueData && apiLeagueData.id) {
                     dbLeagueR33 = await prisma.league.findUnique({ where: { sportMonksId: apiLeagueData.id } });
                     if (!dbLeagueR33 && typeof apiLeagueData.country_id === 'number') {
@@ -568,7 +569,7 @@ export default async function GamePage({ params }: GamePageProps) {
                 }
 
                 const currentSeasonData = apiLeagueData?.currentseason;
-                let dbSeasonR33: any = null;
+                let dbSeasonR33: Season | null = null; // Use Prisma type directly
                 if (currentSeasonData && currentSeasonData.id && dbLeagueR33) {
                     dbSeasonR33 = await prisma.season.findUnique({ where: { sportMonksId: currentSeasonData.id } });
                     if (!dbSeasonR33) {

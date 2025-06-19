@@ -54,6 +54,47 @@ export function LastManStandingGame({
         Array<{ teamId: string; teamName: string; percentage: number }>
     >([]);
     const [isLoadingPercentages, setIsLoadingPercentages] = useState<boolean>(false);
+    const [isRoundInPlay, setIsRoundInPlay] = useState<boolean>(false); // New state for "in play"
+
+    useEffect(() => {
+        // Determine if the round is "in play" (picks locked)
+        if (!fixtures || fixtures.length === 0 || !currentRoundId) {
+            setIsRoundInPlay(false);
+
+            return;
+        }
+
+        let earliestStartTime = Infinity;
+        for (const fixture of fixtures) {
+            const fixtureTime = new Date(fixture.starting_at).getTime();
+            if (fixtureTime < earliestStartTime) {
+                earliestStartTime = fixtureTime;
+            }
+        }
+
+        if (earliestStartTime === Infinity) {
+            setIsRoundInPlay(false);
+
+            return;
+        }
+
+        // Picks lock when the first game of the round starts (or a defined deadline)
+        const pickLockTime = earliestStartTime;
+        const now = new Date().getTime();
+
+        if (now >= pickLockTime) {
+            setIsRoundInPlay(true);
+        } else {
+            setIsRoundInPlay(false);
+            const timeToLock = pickLockTime - now;
+            const timer = setTimeout(() => {
+                setIsRoundInPlay(true);
+            }, timeToLock);
+            // Cleanup timer when component unmounts or dependencies change
+
+            return () => clearTimeout(timer);
+        }
+    }, [fixtures, currentRoundId]);
 
     useEffect(() => {
         // Fetch previously picked teams by the user for this game instance
@@ -115,10 +156,13 @@ export function LastManStandingGame({
 
         // Only fetch percentages if currentRoundId and gameInstance.id are available
         // Add condition here if percentages should only be shown when "in play"
-        if (currentRoundId && gameInstance.id) {
+        if (currentRoundId && gameInstance.id && isRoundInPlay) {
+            // Added isRoundInPlay condition
             fetchPickPercentages();
+        } else {
+            setPickPercentages([]); // Clear if not in play or no round
         }
-    }, [currentRoundId, gameInstance.id]);
+    }, [currentRoundId, gameInstance.id, isRoundInPlay]); // Added isRoundInPlay to dependencies
 
     useEffect(() => {
         // Format dates on the client side after hydration
@@ -244,11 +288,12 @@ export function LastManStandingGame({
                                                 />
                                             )}
                                             <span>{participant.name}</span>
-                                            {percentageData && (
+                                            {isRoundInPlay && percentageData && (
                                                 <span className='text-muted-foreground mt-1 text-xs'>
                                                     ({percentageData.percentage}%)
                                                 </span>
                                             )}
+                                            {/* Optionally, show a placeholder if !isRoundInPlay and percentages are hidden */}
                                         </div>
                                     );
                                 })}

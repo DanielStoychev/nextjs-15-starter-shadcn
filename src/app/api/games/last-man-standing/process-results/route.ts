@@ -317,46 +317,70 @@ export async function POST(request: Request) {
                 `All players for game instance ${gameInstanceId} eliminated! Rollover triggered for round ${localRound.name}.`
             );
             // TODO: Implement actual rollover logic:
-            // 1. Update GameInstance: mark as needing rollover, update prize pool if it accumulates.
-            // await prisma.gameInstance.update({ where: { id: gameInstanceId }, data: { status: 'COMPLETED', prizePool: newPrizePool }});
-            // 2. Potentially create a new GameInstance for the next cycle.
-        } else {
-            // If not a rollover, check if this is the end of a custom duration game
-            const gameInstanceData = await prisma.gameInstance.findUnique({
-                where: { id: gameInstanceId }
-                // Select all scalar fields by default
-            });
+            // For now, a rollover means the game instance is COMPLETED.
+            // Prize pool handling and new instance creation are future enhancements.
+            // The 'isRollover' flag below will indicate if this completion was due to a rollover.
+        }
 
-            const gameInstance = gameInstanceData as typeof gameInstanceData & {
-                numberOfRounds?: number | null;
-                instanceRoundCUIDs?: string[];
-            };
+        // Determine final status of the game instance
+        const finalRemainingActiveUsers = await prisma.userGameEntry.count({
+            where: { gameInstanceId: gameInstanceId, status: 'ACTIVE' }
+        });
 
-            if (
-                gameInstance?.numberOfRounds &&
-                gameInstance.instanceRoundCUIDs &&
-                gameInstance.instanceRoundCUIDs.length > 0
-            ) {
-                const isLastRoundOfInstance =
-                    gameInstance.instanceRoundCUIDs[gameInstance.instanceRoundCUIDs.length - 1] === roundId;
+        const currentInstance = await prisma.gameInstance.findUnique({
+            where: { id: gameInstanceId }
+            // Fetches all scalar fields including numberOfRounds, instanceRoundCUIDs
+        });
 
-                if (isLastRoundOfInstance && remainingActiveUsers > 0) {
-                    // This was the last round, and there are winners
-                    console.log(`Game instance ${gameInstanceId} completed. ${remainingActiveUsers} winner(s).`);
-                    await prisma.gameInstance.update({
-                        where: { id: gameInstanceId },
-                        data: { status: 'COMPLETED' }
-                    });
-                    // Further logic for prize distribution etc. would go here
-                } else if (isLastRoundOfInstance && remainingActiveUsers === 0) {
-                    // Last round and everyone was eliminated - this is effectively a rollover for this specific instance.
-                    // The rolloverTriggered flag above would already be true.
-                    // Ensure GameInstance is marked COMPLETED.
-                    await prisma.gameInstance.update({
-                        where: { id: gameInstanceId },
-                        data: { status: 'COMPLETED' } // Or a specific 'ROLLED_OVER_FINAL_ROUND' status
-                    });
+        if (!currentInstance) {
+            // This should ideally not happen if earlier checks passed
+            console.error(`Critical error: GameInstance ${gameInstanceId} not found for final status update.`);
+            // Consider how to handle this - maybe return an error response earlier
+        }
+
+        let finalInstanceStatus: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED' = currentInstance?.status || 'ACTIVE'; // Default to existing or ACTIVE
+        let isRolloverScenario = false;
+
+        if (currentInstance) {
+            // Using 'as any' for numberOfRounds and instanceRoundCUIDs due to persistent TS type errors
+            // This assumes the fields are present at runtime after a successful prisma generate & migration.
+            const numberOfRounds = (currentInstance as any).numberOfRounds as number | null | undefined;
+            const instanceRoundCUIDs = (currentInstance as any).instanceRoundCUIDs as string[] | undefined;
+
+            const isCustomDurationGame = numberOfRounds && instanceRoundCUIDs && instanceRoundCUIDs.length > 0;
+            const isLastRoundOfInstance =
+                isCustomDurationGame && instanceRoundCUIDs![instanceRoundCUIDs!.length - 1] === roundId;
+
+            if (isLastRoundOfInstance) {
+                finalInstanceStatus = 'COMPLETED';
+                if (finalRemainingActiveUsers === 0) {
+                    console.log(
+                        `LMS Game instance ${gameInstanceId} (custom duration) ended on its last round with all players eliminated. Considered a rollover.`
+                    );
+                    isRolloverScenario = true;
+                } else {
+                    console.log(
+                        `LMS Game instance ${gameInstanceId} (custom duration) completed. ${finalRemainingActiveUsers} winner(s).`
+                    );
                 }
+            } else if (finalRemainingActiveUsers === 0 && picks.length > 0) {
+                // Not necessarily the last round (or not a custom game), but everyone eliminated
+                finalInstanceStatus = 'COMPLETED';
+                isRolloverScenario = true;
+                console.log(
+                    `LMS: All players for game instance ${gameInstanceId} eliminated before designated final round (if any)! Rollover triggered for round ${localRound.name}.`
+                );
+            }
+            // If none of the above, status remains as is (e.g. ACTIVE if game continues)
+
+            if (finalInstanceStatus !== currentInstance.status) {
+                await prisma.gameInstance.update({
+                    where: { id: gameInstanceId },
+                    data: { status: finalInstanceStatus }
+                });
+                console.log(
+                    `LMS Game instance ${gameInstanceId} status updated to ${finalInstanceStatus}. Rollover: ${isRolloverScenario}`
+                );
             }
         }
 
@@ -367,8 +391,8 @@ export async function POST(request: Request) {
                     roundProcessed: localRound.name,
                     picksEvaluated: picks.length,
                     usersEliminatedThisRound: usersEliminatedThisRound,
-                    remainingActiveUsers: remainingActiveUsers,
-                    rolloverTriggered: rolloverTriggered
+                    remainingActiveUsers: finalRemainingActiveUsers, // Use the re-fetched count
+                    rolloverTriggered: isRolloverScenario
                 }
             },
             { status: 200 }
