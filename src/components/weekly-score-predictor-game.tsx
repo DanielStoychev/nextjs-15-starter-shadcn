@@ -107,6 +107,7 @@ const WeeklyScorePredictorGame: React.FC<WeeklyScorePredictorGameProps> = ({ gam
             if (response.ok) {
                 toast.success('Predictions submitted successfully!');
                 setHasSubmitted(true);
+                window.location.reload(); // Refresh the page
             } else {
                 const errorData = await response.json();
                 toast.error(errorData.message || 'Failed to submit predictions.');

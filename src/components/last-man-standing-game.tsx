@@ -210,6 +210,7 @@ export function LastManStandingGame({
             alert('Pick submitted successfully!');
             // Optionally, refresh state or redirect, e.g., refetch picked teams
             // fetchPickedTeams(); // Or better, update state directly if API confirms success
+            window.location.reload(); // Refresh the page
             setSelectedTeamId(null); // Reset selection
             // Add the just picked team to previouslyPickedTeamIds to immediately disable it
             setPreviouslyPickedTeamIds((prev) => [...prev, String(selectedTeamId)]);

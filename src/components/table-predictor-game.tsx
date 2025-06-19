@@ -86,6 +86,7 @@ const TablePredictorGame: React.FC<TablePredictorGameProps> = ({ gameInstanceId,
             if (response.ok) {
                 toast.success('Prediction submitted successfully!');
                 setHasSubmitted(true);
+                window.location.reload(); // Refresh the page
             } else {
                 const errorData = await response.json();
                 toast.error(errorData.message || 'Failed to submit prediction.');
