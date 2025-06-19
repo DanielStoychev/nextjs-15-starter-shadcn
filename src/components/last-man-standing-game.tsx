@@ -47,8 +47,11 @@ export function LastManStandingGame({
 }: LastManStandingGameProps) {
     const { data: session } = useSession();
     const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
+    const [currentPickForRound, setCurrentPickForRound] = useState<{ pickedTeamId: string; roundId: string } | null>(
+        null
+    ); // Store current round's pick
     const [formattedDates, setFormattedDates] = useState<Record<number, string>>({});
-    const [previouslyPickedTeamIds, setPreviouslyPickedTeamIds] = useState<string[]>([]);
+    const [previouslyPickedTeamIdsInOtherRounds, setPreviouslyPickedTeamIdsInOtherRounds] = useState<string[]>([]); // Renamed for clarity
     const [isLoadingPicks, setIsLoadingPicks] = useState<boolean>(true);
     const [pickPercentages, setPickPercentages] = useState<
         Array<{ teamId: string; teamName: string; percentage: number }>
@@ -97,35 +100,50 @@ export function LastManStandingGame({
     }, [fixtures, currentRoundId]);
 
     useEffect(() => {
-        // Fetch previously picked teams by the user for this game instance
-        const fetchPickedTeams = async () => {
-            if (session?.user?.id && gameInstance.id) {
+        // Fetch user's pick data: all previously picked teams in this instance AND the pick for the current round
+        const fetchUserPicksData = async () => {
+            if (session?.user?.id && gameInstance.id && currentRoundId) {
+                // Ensure currentRoundId is available
                 setIsLoadingPicks(true);
                 try {
                     const response = await fetch(
-                        `/api/games/last-man-standing/user-picks?gameInstanceId=${gameInstance.id}`
+                        `/api/games/last-man-standing/user-picks?gameInstanceId=${gameInstance.id}&currentRoundId=${currentRoundId}`
                     );
                     if (response.ok) {
                         const data = await response.json();
-                        setPreviouslyPickedTeamIds(data.pickedTeamIds || []);
+                        // Store teams picked in *other* rounds for the "already picked this team" rule
+                        setPreviouslyPickedTeamIdsInOtherRounds(
+                            (data.allPickedTeamIdsInInstance || []).filter(
+                                (teamId: string) => data.currentRoundPick?.pickedTeamId !== teamId
+                            )
+                        );
+                        setCurrentPickForRound(data.currentRoundPick || null);
+                        if (data.currentRoundPick) {
+                            setSelectedTeamId(Number(data.currentRoundPick.pickedTeamId));
+                        } else {
+                            setSelectedTeamId(null); // No pick for current round yet
+                        }
                     } else {
-                        console.error('Failed to fetch previously picked teams');
-                        setPreviouslyPickedTeamIds([]); // Set to empty on error
+                        console.error('Failed to fetch user picks data');
+                        setPreviouslyPickedTeamIdsInOtherRounds([]);
+                        setCurrentPickForRound(null);
                     }
                 } catch (error) {
-                    console.error('Error fetching previously picked teams:', error);
-                    setPreviouslyPickedTeamIds([]); // Set to empty on error
+                    console.error('Error fetching user picks data:', error);
+                    setPreviouslyPickedTeamIdsInOtherRounds([]);
+                    setCurrentPickForRound(null);
                 } finally {
                     setIsLoadingPicks(false);
                 }
             } else {
-                setPreviouslyPickedTeamIds([]);
+                setPreviouslyPickedTeamIdsInOtherRounds([]);
+                setCurrentPickForRound(null);
                 setIsLoadingPicks(false);
             }
         };
 
-        fetchPickedTeams();
-    }, [session, gameInstance.id]);
+        fetchUserPicksData();
+    }, [session, gameInstance.id, currentRoundId]);
 
     useEffect(() => {
         // Fetch pick percentages for the current round
@@ -174,8 +192,14 @@ export function LastManStandingGame({
     }, [fixtures]);
 
     const handlePickTeam = (teamId: number) => {
-        if (previouslyPickedTeamIds.includes(String(teamId))) {
-            alert('You have already picked this team in this game cycle.');
+        if (isRoundInPlay) {
+            alert('Picks are locked for this round.');
+
+            return;
+        }
+        // Check if team was picked in a *different* round of this game instance
+        if (previouslyPickedTeamIdsInOtherRounds.includes(String(teamId))) {
+            alert('You have already picked this team in a previous round of this game cycle.');
 
             return;
         }
@@ -207,13 +231,10 @@ export function LastManStandingGame({
                 throw new Error(errorData.message || 'Failed to submit pick');
             }
 
-            alert('Pick submitted successfully!');
-            // Optionally, refresh state or redirect, e.g., refetch picked teams
-            // fetchPickedTeams(); // Or better, update state directly if API confirms success
-            window.location.reload(); // Refresh the page
-            setSelectedTeamId(null); // Reset selection
-            // Add the just picked team to previouslyPickedTeamIds to immediately disable it
-            setPreviouslyPickedTeamIds((prev) => [...prev, String(selectedTeamId)]);
+            alert(currentPickForRound ? 'Pick updated successfully!' : 'Pick submitted successfully!');
+            window.location.reload(); // Refresh the page to get all updated states
+            // No need to manually update local state like setSelectedTeamId or previouslyPickedTeamIds,
+            // as the reload and subsequent fetchUserPicksData will handle it.
         } catch (err) {
             alert(`Error submitting pick: ${(err as Error).message}`);
         }
@@ -259,7 +280,17 @@ export function LastManStandingGame({
                             </p>
                             <div className='mt-4 flex justify-around'>
                                 {fixture.participants.map((participant) => {
-                                    const isTeamDisabled = previouslyPickedTeamIds.includes(String(participant.id));
+                                    // Disable if round is in play OR if team was picked in another round of this instance
+                                    const isTeamDisabledForOtherRounds = previouslyPickedTeamIdsInOtherRounds.includes(
+                                        String(participant.id)
+                                    );
+                                    // Allow picking the currently picked team again (to change away from it)
+                                    const isCurrentlyPickedTeam =
+                                        currentPickForRound?.pickedTeamId === String(participant.id);
+
+                                    const isSelectionDisabled =
+                                        isRoundInPlay || (isTeamDisabledForOtherRounds && !isCurrentlyPickedTeam);
+
                                     const percentageData = pickPercentages.find(
                                         (p) => p.teamId === String(participant.id)
                                     );
@@ -267,17 +298,15 @@ export function LastManStandingGame({
                                     return (
                                         <div
                                             key={participant.id}
-                                            onClick={() => !isTeamDisabled && handlePickTeam(participant.id)}
+                                            onClick={() => !isSelectionDisabled && handlePickTeam(participant.id)}
                                             className={`flex h-auto flex-col items-center rounded-md border p-2 transition-colors ${
-                                                isTeamDisabled
+                                                isSelectionDisabled
                                                     ? 'bg-muted cursor-not-allowed opacity-50'
                                                     : 'hover:bg-accent cursor-pointer'
                                             } ${
-                                                selectedTeamId === participant.id && !isTeamDisabled
+                                                selectedTeamId === participant.id && !isSelectionDisabled
                                                     ? 'bg-primary text-primary-foreground'
-                                                    : isTeamDisabled
-                                                      ? ''
-                                                      : 'bg-background text-foreground'
+                                                    : ''
                                             }`}>
                                             {participant.image_path && (
                                                 <Image
@@ -302,8 +331,11 @@ export function LastManStandingGame({
                         </div>
                     ))}
                 </div>
-                <Button onClick={handleSubmitPick} disabled={!selectedTeamId} className='mt-6'>
-                    Submit Pick
+                <Button
+                    onClick={handleSubmitPick}
+                    disabled={!selectedTeamId || isLoadingPicks || isRoundInPlay}
+                    className='mt-6'>
+                    {isRoundInPlay ? 'Picks Locked' : currentPickForRound ? 'Update Pick' : 'Submit Pick'}
                 </Button>
             </CardContent>
         </Card>

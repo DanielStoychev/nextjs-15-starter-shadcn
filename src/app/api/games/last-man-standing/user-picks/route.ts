@@ -14,6 +14,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const gameInstanceId = searchParams.get('gameInstanceId');
+    const currentRoundId = searchParams.get('currentRoundId'); // Optional
 
     if (!gameInstanceId) {
         return NextResponse.json({ message: 'Missing gameInstanceId parameter' }, { status: 400 });
@@ -30,23 +31,40 @@ export async function GET(request: Request) {
         });
 
         if (!userGameEntry) {
-            // If the user hasn't made any picks yet, they won't have an entry in some scenarios,
-            // or they might not be part of this game instance. Return empty array.
-            return NextResponse.json({ pickedTeamIds: [] }, { status: 200 });
+            return NextResponse.json({ allPickedTeamIdsInInstance: [], currentRoundPick: null }, { status: 200 });
         }
 
-        const picks = await prisma.lastManStandingPick.findMany({
+        // Fetch all picks for this game entry to determine teams picked in any round of this instance
+        const allPicksInInstance = await prisma.lastManStandingPick.findMany({
             where: {
                 userGameEntryId: userGameEntry.id
             },
             select: {
-                pickedTeamId: true
+                pickedTeamId: true,
+                roundId: true // Include roundId to identify the current round's pick
             }
         });
 
-        const pickedTeamIds = picks.map((pick) => pick.pickedTeamId);
+        const allPickedTeamIdsInInstance = allPicksInInstance.map((pick) => pick.pickedTeamId);
+        let currentRoundPickData: { pickedTeamId: string; roundId: string } | null = null;
 
-        return NextResponse.json({ pickedTeamIds }, { status: 200 });
+        if (currentRoundId) {
+            const foundPick = allPicksInInstance.find((pick) => pick.roundId === currentRoundId);
+            if (foundPick) {
+                currentRoundPickData = {
+                    pickedTeamId: foundPick.pickedTeamId,
+                    roundId: foundPick.roundId
+                };
+            }
+        }
+
+        return NextResponse.json(
+            {
+                allPickedTeamIdsInInstance, // Teams picked in any round of this instance
+                currentRoundPick: currentRoundPickData // Specific pick for the current round (if requested)
+            },
+            { status: 200 }
+        );
     } catch (error) {
         console.error('Error fetching user Last Man Standing picks:', error);
 

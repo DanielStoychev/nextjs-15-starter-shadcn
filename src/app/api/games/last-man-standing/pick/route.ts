@@ -41,45 +41,67 @@ export async function POST(request: Request) {
             });
         }
 
-        // 2. Check if the user has already picked for this round in this game instance
-        const existingPick = await prisma.lastManStandingPick.findUnique({
-            where: {
-                userGameEntryId_roundId: {
-                    userGameEntryId: userGameEntry.id,
-                    roundId: roundId
-                }
+        // 2. Fetch the Round to check its start date (for pick lock time)
+        const round = await prisma.round.findUnique({
+            where: { id: roundId }, // Assuming roundId is the CUID from our DB
+            select: {
+                startDate: true,
+                fixtures: { select: { matchDate: true }, orderBy: { matchDate: 'asc' }, take: 1 }
             }
         });
 
-        if (existingPick) {
-            return NextResponse.json({ message: 'You have already made a pick for this round.' }, { status: 409 });
+        if (!round) {
+            return NextResponse.json({ message: 'Round not found.' }, { status: 404 });
         }
 
-        // 3. Check if the picked team has been used before in this game instance (LMS rule)
-        // New rule: A team, once picked in a game instance, cannot be picked again, regardless of outcome.
-        const previousPicks = await prisma.lastManStandingPick.findMany({
+        // Determine the lock time: either the round's official start date or the first fixture's matchDate
+        let lockTime = round.startDate;
+        if (round.fixtures && round.fixtures.length > 0) {
+            lockTime = round.fixtures[0].matchDate;
+        }
+
+        if (new Date() > new Date(lockTime)) {
+            return NextResponse.json(
+                { message: 'Picks are locked for this round. Changes are no longer allowed.' },
+                { status: 403 }
+            );
+        }
+
+        // 3. Check if the picked team has been used before in *other* rounds of this game instance
+        const previousPicksInOtherRounds = await prisma.lastManStandingPick.findMany({
             where: {
-                userGameEntryId: userGameEntry.id
-                // Removed isCorrect: true, as any previous pick makes the team ineligible
+                userGameEntryId: userGameEntry.id,
+                roundId: {
+                    not: roundId // Exclude the current round from this specific check
+                }
             },
             select: {
                 pickedTeamId: true
             }
         });
 
-        const usedTeamIds = previousPicks.map((pick) => pick.pickedTeamId);
-        if (usedTeamIds.includes(String(pickedTeamId))) {
+        const usedTeamIdsInOtherRounds = previousPicksInOtherRounds.map((pick) => pick.pickedTeamId);
+        if (usedTeamIdsInOtherRounds.includes(String(pickedTeamId))) {
             return NextResponse.json(
-                { message: 'You have already picked this team in this game cycle.' },
-                { status: 403 } // 403 Forbidden or 409 Conflict could be appropriate
+                { message: 'You have already picked this team in a previous round of this game cycle.' },
+                { status: 403 }
             );
         }
 
-        // 4. Save the pick
-        await prisma.lastManStandingPick.create({
-            data: {
+        // 4. Upsert the pick (create or update)
+        await prisma.lastManStandingPick.upsert({
+            where: {
+                userGameEntryId_roundId: {
+                    userGameEntryId: userGameEntry.id,
+                    roundId: roundId
+                }
+            },
+            update: {
+                pickedTeamId: String(pickedTeamId)
+            },
+            create: {
                 userGameEntryId: userGameEntry.id,
-                roundId: roundId, // Use the dynamic roundId from the request
+                roundId: roundId,
                 pickedTeamId: String(pickedTeamId)
                 // isCorrect will be determined by a background job later
             }
