@@ -1,0 +1,646 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
+import { useRouter } from 'next/navigation';
+
+import { useToast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/registry/new-york-v4/ui/badge';
+import { Button } from '@/registry/new-york-v4/ui/button';
+import { Calendar } from '@/registry/new-york-v4/ui/calendar';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/registry/new-york-v4/ui/card';
+import {
+    Form,
+    FormControl,
+    FormDescription,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage
+} from '@/registry/new-york-v4/ui/form';
+import { Input } from '@/registry/new-york-v4/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/registry/new-york-v4/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/registry/new-york-v4/ui/select';
+import { Separator } from '@/registry/new-york-v4/ui/separator';
+import { Textarea } from '@/registry/new-york-v4/ui/textarea';
+import { zodResolver } from '@hookform/resolvers/zod';
+
+import { format } from 'date-fns';
+import { CalendarIcon, Clock, Copy, DollarSign, Eye, EyeOff, Save, Trash2, Trophy, Users } from 'lucide-react';
+import type { ControllerRenderProps, FieldValues } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
+
+// Game Instance Status enum from Prisma
+const gameInstanceStatuses = ['PENDING', 'ACTIVE', 'COMPLETED', 'CANCELLED'] as const;
+
+const formSchema = z
+    .object({
+        gameId: z.string().min(1, 'Game selection is required.'),
+        name: z.string().min(3, 'Instance name must be at least 3 characters.'),
+        description: z.string().default(''),
+        startDate: z.date({ required_error: 'Start date is required.' }),
+        endDate: z.date({ required_error: 'End date is required.' }),
+        entryFee: z.coerce.number().min(0, 'Entry fee cannot be negative.'),
+        prizePool: z.coerce.number().min(0, 'Prize pool cannot be negative.'),
+        numberOfRounds: z.coerce.number().int().positive().optional().nullable(),
+        status: z.enum(gameInstanceStatuses),
+        maxEntries: z.coerce.number().int().positive().optional().nullable(),
+        autoStart: z.boolean().default(false),
+        autoEnd: z.boolean().default(false),
+        isPublic: z.boolean().default(true),
+        tags: z.string().default('')
+    })
+    .refine(
+        (data) => {
+            return data.endDate > data.startDate;
+        },
+        {
+            message: 'End date must be after start date.',
+            path: ['endDate']
+        }
+    );
+
+type GameInstanceFormValues = z.infer<typeof formSchema>;
+
+interface Game {
+    id: string;
+    name: string;
+    slug: string;
+    description?: string;
+}
+
+interface GameInstance extends GameInstanceFormValues {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    userEntries?: Array<{ id: string; status: string }>;
+}
+
+interface EnhancedGameInstanceFormProps {
+    games: Game[];
+    gameInstance?: GameInstance | null; // For editing existing instances
+    mode?: 'create' | 'edit' | 'duplicate';
+    onInstanceSaved?: (instance: any) => void;
+    onCancel?: () => void;
+}
+
+export function EnhancedGameInstanceForm({
+    games,
+    gameInstance,
+    mode = 'create',
+    onInstanceSaved,
+    onCancel
+}: EnhancedGameInstanceFormProps) {
+    const { toast } = useToast();
+    const router = useRouter();
+    const [isLoading, setIsLoading] = useState(false);
+    const [previewMode, setPreviewMode] = useState(false);
+
+    const isEditing = mode === 'edit' && gameInstance;
+    const isDuplicating = mode === 'duplicate' && gameInstance;
+
+    const form = useForm<GameInstanceFormValues>({
+        resolver: zodResolver(formSchema),
+        defaultValues: {
+            gameId: gameInstance?.gameId || '',
+            name: isDuplicating ? `${gameInstance?.name} (Copy)` : gameInstance?.name || '',
+            description: gameInstance?.description || '',
+            startDate: gameInstance?.startDate ? new Date(gameInstance.startDate) : new Date(),
+            endDate: gameInstance?.endDate
+                ? new Date(gameInstance.endDate)
+                : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            entryFee: gameInstance?.entryFee || 0,
+            prizePool: gameInstance?.prizePool || 0,
+            numberOfRounds: gameInstance?.numberOfRounds || null,
+            status: isDuplicating ? 'PENDING' : gameInstance?.status || 'PENDING',
+            maxEntries: gameInstance?.maxEntries || null,
+            autoStart: gameInstance?.autoStart || false,
+            autoEnd: gameInstance?.autoEnd || false,
+            isPublic: gameInstance?.isPublic !== undefined ? gameInstance.isPublic : true,
+            tags: gameInstance?.tags || ''
+        }
+    });
+
+    // Watch form values for preview
+    const watchedValues = form.watch();
+
+    async function onSubmit(data: GameInstanceFormValues) {
+        setIsLoading(true);
+        try {
+            const payload = {
+                ...data,
+                startDate: data.startDate.toISOString(),
+                endDate: data.endDate.toISOString(),
+                numberOfRounds: data.numberOfRounds ? Number(data.numberOfRounds) : null,
+                maxEntries: data.maxEntries ? Number(data.maxEntries) : null,
+                tags: data.tags
+                    ? data.tags
+                          .split(',')
+                          .map((tag) => tag.trim())
+                          .filter(Boolean)
+                    : []
+            };
+
+            const url = isEditing ? `/api/admin/game-instances/${gameInstance.id}` : '/api/admin/game-instances';
+
+            const method = isEditing ? 'PUT' : 'POST';
+
+            const response = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `Failed to ${isEditing ? 'update' : 'create'} game instance.`);
+            }
+
+            const result = await response.json();
+
+            toast({
+                title: 'Success!',
+                description: `Game instance ${isEditing ? 'updated' : 'created'} successfully.`
+            });
+
+            if (onInstanceSaved) {
+                onInstanceSaved(result);
+            } else {
+                router.refresh();
+            }
+
+            if (!isEditing) {
+                form.reset();
+            }
+        } catch (error: any) {
+            toast({
+                title: 'Error',
+                description: error.message || 'An unexpected error occurred.',
+                variant: 'destructive'
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    const handleDuplicate = () => {
+        if (!gameInstance) return;
+
+        // Reset form with duplicated values
+        form.reset({
+            ...gameInstance,
+            name: `${gameInstance.name} (Copy)`,
+            status: 'PENDING',
+            startDate: new Date(),
+            endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        });
+    };
+
+    const selectedGame = games.find((game) => game.id === watchedValues.gameId);
+
+    return (
+        <Card className='w-full'>
+            <CardHeader>
+                <div className='flex items-center justify-between'>
+                    <div>
+                        <CardTitle className='flex items-center gap-2'>
+                            {isEditing ? 'Edit Game Instance' : 'Create New Game Instance'}
+                            {isEditing && <Badge variant='outline'>{watchedValues.status}</Badge>}
+                        </CardTitle>
+                        <CardDescription>
+                            {isEditing
+                                ? 'Update the game instance details below.'
+                                : 'Fill in the details to create a new game instance.'}
+                        </CardDescription>
+                    </div>
+                    <div className='flex items-center gap-2'>
+                        <Button type='button' variant='outline' size='sm' onClick={() => setPreviewMode(!previewMode)}>
+                            {previewMode ? <EyeOff className='h-4 w-4' /> : <Eye className='h-4 w-4' />}
+                            {previewMode ? 'Edit' : 'Preview'}
+                        </Button>
+                        {isEditing && (
+                            <Button type='button' variant='outline' size='sm' onClick={handleDuplicate}>
+                                <Copy className='mr-2 h-4 w-4' />
+                                Duplicate
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                {previewMode ? (
+                    <GameInstancePreview instance={watchedValues} game={selectedGame} />
+                ) : (
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+                            {/* Basic Information */}
+                            <div className='space-y-4'>
+                                <h3 className='text-lg font-medium'>Basic Information</h3>
+                                <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+                                    <FormField
+                                        control={form.control}
+                                        name='gameId'
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Game Type</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder='Select a game type' />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        {games.map((game) => (
+                                                            <SelectItem key={game.id} value={game.id}>
+                                                                {game.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name='status'
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Status</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger>
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        {gameInstanceStatuses.map((status) => (
+                                                            <SelectItem key={status} value={status}>
+                                                                {status.charAt(0) + status.slice(1).toLowerCase()}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+
+                                <FormField
+                                    control={form.control}
+                                    name='name'
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Instance Name</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder='e.g., Premier League Week 1' {...field} />
+                                            </FormControl>
+                                            <FormDescription>
+                                                A unique name to identify this game instance.
+                                            </FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name='description'
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Description (Optional)</FormLabel>
+                                            <FormControl>
+                                                <Textarea
+                                                    placeholder='Additional details about this game instance...'
+                                                    className='resize-none'
+                                                    rows={3}
+                                                    {...field}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+
+                            <Separator />
+
+                            {/* Scheduling */}
+                            <div className='space-y-4'>
+                                <h3 className='flex items-center gap-2 text-lg font-medium'>
+                                    <Clock className='h-5 w-5' />
+                                    Scheduling
+                                </h3>
+                                <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+                                    <FormField
+                                        control={form.control}
+                                        name='startDate'
+                                        render={({ field }) => (
+                                            <FormItem className='flex flex-col'>
+                                                <FormLabel>Start Date</FormLabel>
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                        <FormControl>
+                                                            <Button
+                                                                variant='outline'
+                                                                className={cn(
+                                                                    'w-full pl-3 text-left font-normal',
+                                                                    !field.value && 'text-muted-foreground'
+                                                                )}>
+                                                                {field.value ? (
+                                                                    format(field.value, 'PPP')
+                                                                ) : (
+                                                                    <span>Pick a date</span>
+                                                                )}
+                                                                <CalendarIcon className='ml-auto h-4 w-4 opacity-50' />
+                                                            </Button>
+                                                        </FormControl>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className='w-auto p-0' align='start'>
+                                                        <Calendar
+                                                            mode='single'
+                                                            selected={field.value}
+                                                            onSelect={field.onChange}
+                                                            disabled={(date) => date < new Date()}
+                                                            initialFocus
+                                                        />
+                                                    </PopoverContent>
+                                                </Popover>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name='endDate'
+                                        render={({ field }) => (
+                                            <FormItem className='flex flex-col'>
+                                                <FormLabel>End Date</FormLabel>
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                        <FormControl>
+                                                            <Button
+                                                                variant='outline'
+                                                                className={cn(
+                                                                    'w-full pl-3 text-left font-normal',
+                                                                    !field.value && 'text-muted-foreground'
+                                                                )}>
+                                                                {field.value ? (
+                                                                    format(field.value, 'PPP')
+                                                                ) : (
+                                                                    <span>Pick a date</span>
+                                                                )}
+                                                                <CalendarIcon className='ml-auto h-4 w-4 opacity-50' />
+                                                            </Button>
+                                                        </FormControl>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className='w-auto p-0' align='start'>
+                                                        <Calendar
+                                                            mode='single'
+                                                            selected={field.value}
+                                                            onSelect={field.onChange}
+                                                            disabled={(date) => date < watchedValues.startDate}
+                                                            initialFocus
+                                                        />
+                                                    </PopoverContent>
+                                                </Popover>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                            </div>
+
+                            <Separator />
+
+                            {/* Financial Settings */}
+                            <div className='space-y-4'>
+                                <h3 className='flex items-center gap-2 text-lg font-medium'>
+                                    <DollarSign className='h-5 w-5' />
+                                    Financial Settings
+                                </h3>
+                                <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+                                    <FormField
+                                        control={form.control}
+                                        name='entryFee'
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Entry Fee (pence)</FormLabel>
+                                                <FormControl>
+                                                    <Input type='number' placeholder='0' min='0' {...field} />
+                                                </FormControl>
+                                                <FormDescription>
+                                                    Entry fee in pence (e.g., 500 = £5.00)
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name='prizePool'
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Initial Prize Pool (pence)</FormLabel>
+                                                <FormControl>
+                                                    <Input type='number' placeholder='0' min='0' {...field} />
+                                                </FormControl>
+                                                <FormDescription>
+                                                    Initial prize pool in pence. Will be dynamically updated to 80% of
+                                                    total entry fees when users join.
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                            </div>
+
+                            <Separator />
+
+                            {/* Game Settings */}
+                            <div className='space-y-4'>
+                                <h3 className='flex items-center gap-2 text-lg font-medium'>
+                                    <Trophy className='h-5 w-5' />
+                                    Game Settings
+                                </h3>
+                                <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+                                    <FormField
+                                        control={form.control}
+                                        name='numberOfRounds'
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Number of Rounds (Optional)</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type='number'
+                                                        placeholder='Auto-calculated'
+                                                        min='1'
+                                                        {...field}
+                                                        value={field.value || ''}
+                                                    />
+                                                </FormControl>
+                                                <FormDescription>Leave empty for auto-calculation</FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name='maxEntries'
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Max Entries (Optional)</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type='number'
+                                                        placeholder='Unlimited'
+                                                        min='1'
+                                                        {...field}
+                                                        value={field.value || ''}
+                                                    />
+                                                </FormControl>
+                                                <FormDescription>Maximum number of participants</FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+
+                                <FormField
+                                    control={form.control}
+                                    name='tags'
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Tags (Optional)</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder='premier-league, weekly, featured' {...field} />
+                                            </FormControl>
+                                            <FormDescription>
+                                                Comma-separated tags for organization and filtering
+                                            </FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className='flex items-center justify-end gap-3 pt-6'>
+                                {onCancel && (
+                                    <Button type='button' variant='outline' onClick={onCancel} disabled={isLoading}>
+                                        Cancel
+                                    </Button>
+                                )}
+                                <Button type='submit' disabled={isLoading}>
+                                    {isLoading ? (
+                                        <>
+                                            <div className='border-primary mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent' />
+                                            {isEditing ? 'Updating...' : 'Creating...'}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className='mr-2 h-4 w-4' />
+                                            {isEditing ? 'Update Instance' : 'Create Instance'}
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        </form>
+                    </Form>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+// Preview component
+function GameInstancePreview({ instance, game }: { instance: GameInstanceFormValues; game?: Game }) {
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('en-GB', {
+            style: 'currency',
+            currency: 'GBP',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        }).format(amount / 100);
+    };
+
+    return (
+        <div className='space-y-6'>
+            <div className='text-center'>
+                <h2 className='text-2xl font-bold'>{instance.name}</h2>
+                <p className='text-muted-foreground'>{game?.name}</p>
+                {instance.description && <p className='text-muted-foreground mt-2 text-sm'>{instance.description}</p>}
+            </div>
+
+            <div className='grid grid-cols-2 gap-4 md:grid-cols-4'>
+                <Card className='p-4 text-center'>
+                    <DollarSign className='text-muted-foreground mx-auto mb-2 h-6 w-6' />
+                    <p className='text-muted-foreground text-sm'>Entry Fee</p>
+                    <p className='text-lg font-semibold'>{formatCurrency(instance.entryFee)}</p>
+                </Card>
+
+                <Card className='p-4 text-center'>
+                    <Trophy className='text-muted-foreground mx-auto mb-2 h-6 w-6' />
+                    <p className='text-muted-foreground text-sm'>Prize Pool</p>
+                    <p className='text-lg font-semibold'>{formatCurrency(instance.prizePool)}</p>
+                </Card>
+
+                <Card className='p-4 text-center'>
+                    <Clock className='text-muted-foreground mx-auto mb-2 h-6 w-6' />
+                    <p className='text-muted-foreground text-sm'>Duration</p>
+                    <p className='text-lg font-semibold'>
+                        {Math.ceil((instance.endDate.getTime() - instance.startDate.getTime()) / (1000 * 60 * 60 * 24))}{' '}
+                        days
+                    </p>
+                </Card>
+
+                <Card className='p-4 text-center'>
+                    <Users className='text-muted-foreground mx-auto mb-2 h-6 w-6' />
+                    <p className='text-muted-foreground text-sm'>Max Entries</p>
+                    <p className='text-lg font-semibold'>{instance.maxEntries || 'Unlimited'}</p>
+                </Card>
+            </div>
+
+            <div className='space-y-2'>
+                <div className='flex justify-between'>
+                    <span className='text-muted-foreground text-sm'>Start Date:</span>
+                    <span className='text-sm'>{format(instance.startDate, 'PPP')}</span>
+                </div>
+                <div className='flex justify-between'>
+                    <span className='text-muted-foreground text-sm'>End Date:</span>
+                    <span className='text-sm'>{format(instance.endDate, 'PPP')}</span>
+                </div>
+                <div className='flex justify-between'>
+                    <span className='text-muted-foreground text-sm'>Status:</span>
+                    <Badge variant='outline'>{instance.status}</Badge>
+                </div>
+                {instance.numberOfRounds && (
+                    <div className='flex justify-between'>
+                        <span className='text-muted-foreground text-sm'>Rounds:</span>
+                        <span className='text-sm'>{instance.numberOfRounds}</span>
+                    </div>
+                )}
+                {instance.tags && (
+                    <div className='flex justify-between'>
+                        <span className='text-muted-foreground text-sm'>Tags:</span>
+                        <div className='flex gap-1'>
+                            {instance.tags.split(',').map((tag, index) => (
+                                <Badge key={index} variant='secondary' className='text-xs'>
+                                    {tag.trim()}
+                                </Badge>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}

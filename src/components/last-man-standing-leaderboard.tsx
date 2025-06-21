@@ -12,6 +12,7 @@ interface LeaderboardEntry {
     status: string;
     latestPickRoundId: string | null;
     latestPickTeamId: number | null;
+    latestPickTeamName: string | null;
     latestPickIsCorrect: boolean | null;
 }
 
@@ -70,7 +71,7 @@ export function LastManStandingLeaderboard({ gameInstanceId }: LastManStandingLe
                         <TableRow>
                             <TableHead>Player</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Latest Pick (Team ID)</TableHead>
+                            <TableHead>Latest Pick</TableHead>
                             <TableHead>Latest Pick (Correct)</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -78,14 +79,27 @@ export function LastManStandingLeaderboard({ gameInstanceId }: LastManStandingLe
                         {leaderboard.map((entry) => (
                             <TableRow key={entry.userId}>
                                 <TableCell>{entry.userName}</TableCell>
-                                <TableCell>{entry.status}</TableCell>
-                                <TableCell>{entry.latestPickTeamId || 'N/A'}</TableCell>
                                 <TableCell>
-                                    {entry.latestPickIsCorrect !== null
-                                        ? entry.latestPickIsCorrect
-                                            ? 'Yes'
-                                            : 'No'
-                                        : 'N/A'}
+                                    <span
+                                        className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                            entry.status === 'ACTIVE'
+                                                ? 'bg-green-100 text-green-800'
+                                                : 'bg-red-100 text-red-800'
+                                        }`}>
+                                        {entry.status}
+                                    </span>
+                                </TableCell>
+                                <TableCell>{entry.latestPickTeamName || 'N/A'}</TableCell>
+                                <TableCell>
+                                    {entry.latestPickIsCorrect !== null ? (
+                                        entry.latestPickIsCorrect ? (
+                                            <span className='font-medium text-green-600'>Yes</span>
+                                        ) : (
+                                            <span className='font-medium text-red-600'>No</span>
+                                        )
+                                    ) : (
+                                        'N/A'
+                                    )}
                                 </TableCell>
                             </TableRow>
                         ))}

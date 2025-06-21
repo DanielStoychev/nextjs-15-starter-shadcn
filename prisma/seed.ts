@@ -78,22 +78,26 @@ async function main() {
         {
             slug: 'last-man-standing',
             name: 'Last Man Standing',
-            description: 'Pick one Premier League team per gameweek to WIN...'
+            description:
+                'Pick one Premier League team per gameweek to WIN their match. You cannot pick the same team twice during the season. If your chosen team fails to win, you are eliminated from the competition. The last player(s) remaining wins the prize pool. Strategy is key - save your strongest teams for the crucial later weeks!'
         },
         {
             slug: 'table-predictor',
             name: 'Premier League Table Predictor',
-            description: 'Arrange all 20 Premier League teams in order...'
+            description:
+                'Arrange all 20 Premier League teams in order from 1st to 20th to predict the final league table at the end of the season. Points are awarded based on how close your predictions are to the actual final positions. The more accurate your predictions, the higher your score. Perfect for fans who think they know how the season will unfold!'
         },
         {
             slug: 'weekly-score-predictor',
             name: 'Weekly Score Predictor',
-            description: 'Predict the exact scores for a selection of matches...'
+            description:
+                'Predict the exact scores for a selection of Premier League matches each gameweek. Earn points for correct results, goal differences, and exact score predictions. Compete against other players weekly with fresh fixtures to predict. Perfect for fans who love analyzing individual matches and predicting outcomes!'
         },
         {
             slug: 'race-to-33',
             name: 'Race to 33',
-            description: 'Users are randomly assigned 4 teams...'
+            description:
+                "Users are randomly assigned 4 teams from the Premier League at the start of the season. Your goal is to be the first player whose teams collectively score 33 points in the league table. Monitor your teams' progress and hope they perform well in the real Premier League. First to reach 33 points wins the competition!"
         }
     ];
 

@@ -1,7 +1,4 @@
-// Import authOptions from the API route file.
-// It's generally better to have authOptions in a separate config file,
-// but we'll work with the current structure.
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth-config';
 
 import { type NextAuthOptions, getServerSession } from 'next-auth';
 import NextAuth from 'next-auth';

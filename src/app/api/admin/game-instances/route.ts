@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth-config';
 // import { PREMIER_LEAGUE_ID } from '@/lib/constants'; // File does not exist
 import prisma from '@/lib/prisma';
 import { getLeagueDetails, getSeasonRounds } from '@/lib/sportmonks-api';
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
                 startDate: new Date(startDate),
                 endDate: calculatedEndDate!, // Assert not null as one path must set it
                 entryFee: entryFee || 0,
-                prizePool: prizePool || 0,
+                prizePool: prizePool || 0, // Admin can set initial prize pool, will be updated when users join
                 status: status || 'PENDING',
                 numberOfRounds: numberOfRounds || null,
                 instanceRoundCUIDs: instanceRoundCUIDs
@@ -167,5 +167,86 @@ export async function POST(request: Request) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
         return NextResponse.json({ message: 'Failed to create game instance', details: errorMessage }, { status: 500 });
+    }
+}
+
+// GET method to fetch game instances
+export async function GET(request: NextRequest) {
+    try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user || session.user.role !== 'ADMIN') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const { searchParams } = new URL(request.url);
+        const include = searchParams.get('include');
+        const status = searchParams.get('status');
+        const gameId = searchParams.get('gameId');
+
+        // Build where clause
+        const where: any = {};
+        if (status) where.status = status;
+        if (gameId) where.gameId = gameId;
+
+        // Build include clause based on query parameters
+        const includeClause: any = {
+            game: {
+                select: {
+                    id: true,
+                    name: true,
+                    slug: true
+                }
+            }
+        };
+
+        if (include?.includes('userEntries')) {
+            includeClause.userEntries = {
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true
+                        }
+                    }
+                }
+            };
+        }
+
+        const gameInstances = await prisma.gameInstance.findMany({
+            where,
+            include: includeClause,
+            orderBy: {
+                startDate: 'desc'
+            }
+        });
+
+        // Transform the data to include computed fields
+        const transformedInstances = gameInstances.map((instance) => ({
+            id: instance.id,
+            name: instance.name,
+            gameId: instance.gameId,
+            startDate: instance.startDate.toISOString(),
+            endDate: instance.endDate.toISOString(),
+            status: instance.status,
+            prizePool: instance.prizePool,
+            entryFee: instance.entryFee,
+            numberOfRounds: instance.numberOfRounds,
+            instanceRoundCUIDs: instance.instanceRoundCUIDs,
+            game: instance.game,
+            userEntries: instance.userEntries || [],
+            // Computed fields
+            totalEntries: instance.userEntries?.length || 0,
+            totalRevenue: (instance.userEntries?.length || 0) * instance.entryFee,
+            completedEntries: instance.userEntries?.filter((entry) => entry.status === 'COMPLETED').length || 0,
+            pendingEntries: instance.userEntries?.filter((entry) => entry.status === 'PENDING_PAYMENT').length || 0
+        }));
+
+        return NextResponse.json(transformedInstances);
+    } catch (error) {
+        console.error('Game instances fetch error:', error);
+
+        return NextResponse.json({ error: 'Failed to fetch game instances' }, { status: 500 });
     }
 }

@@ -8,6 +8,7 @@ import Link from 'next/link';
 // Import Image component
 import { usePathname } from 'next/navigation';
 
+import { HeaderNotificationBell } from '@/components/notifications/header-notification-bell';
 import { Button } from '@/registry/new-york-v4/ui/button';
 // Import React
 
@@ -59,7 +60,10 @@ export default function AppHeader() {
                         </NavigationMenuItem>
                         <NavigationMenuItem>
                             <NavigationMenuLink asChild data-active={pathname === '/games'}>
-                                <Link href='/games' className='text-foreground hover:text-accent-orange'>
+                                <Link
+                                    href='/games'
+                                    className='text-foreground hover:text-accent-orange'
+                                    data-onboarding='games-link'>
                                     Games
                                 </Link>
                             </NavigationMenuLink>
@@ -73,13 +77,7 @@ export default function AppHeader() {
                                 </NavigationMenuLink>
                             </NavigationMenuItem>
                         )}
-                        <NavigationMenuItem>
-                            <NavigationMenuLink asChild data-active={pathname === '/competitions'}>
-                                <Link href='/competitions' className='text-foreground hover:text-accent-orange'>
-                                    Competitions
-                                </Link>
-                            </NavigationMenuLink>
-                        </NavigationMenuItem>
+
                         <NavigationMenuItem>
                             <NavigationMenuLink asChild data-active={pathname === '/leaderboards'}>
                                 <Link href='/leaderboards' className='text-foreground hover:text-accent-orange'>
@@ -95,6 +93,11 @@ export default function AppHeader() {
                     {' '}
                     {/* Hide on small screens */}
                     {/* <ModeToggle /> */} {/* Theme Toggle - Removed */}
+                    {session && (
+                        <div data-onboarding='notifications'>
+                            <HeaderNotificationBell />
+                        </div>
+                    )}
                     {session ? (
                         <Button
                             onClick={() => signOut()}
@@ -119,9 +122,14 @@ export default function AppHeader() {
                 </div>
 
                 {/* Mobile Navigation */}
-                <div className='flex items-center md:hidden'>
+                <div className='flex items-center gap-2 md:hidden'>
                     {' '}
                     {/* Show on small screens */}
+                    {session && (
+                        <div>
+                            <HeaderNotificationBell />
+                        </div>
+                    )}
                     <Sheet>
                         <SheetTrigger asChild>
                             <Button variant='ghost' size='icon'>
@@ -162,11 +170,6 @@ export default function AppHeader() {
                                         Dashboard
                                     </Link>
                                 )}
-                                <Link
-                                    href='/competitions'
-                                    className='text-foreground hover:text-accent-orange text-lg font-medium'>
-                                    Competitions
-                                </Link>
                                 <Link
                                     href='/leaderboards'
                                     className='text-foreground hover:text-accent-orange text-lg font-medium'>

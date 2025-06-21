@@ -1,12 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
-  // Removed custom output path to use default node_modules location
 }
 
 datasource db {
@@ -14,22 +7,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// NextAuth.js Models
 model Account {
   id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -43,22 +34,28 @@ model Session {
 }
 
 model User {
-  id               String    @id @default(cuid())
-  name             String?
-  email            String    @unique // Email should be required for credential login
-  hashedPassword   String? // New field for storing hashed passwords
-  emailVerified    DateTime?
-  image            String?
-  stripeCustomerId String?   @unique // New field for Stripe Customer ID
-  username         String?   @unique
-  bio              String?   @db.Text
-  location         String?
-  favouriteTeam    String?
-  role             Role      @default(USER) // Add role field
-  accounts         Account[]
-  sessions         Session[]
-  orders           Order[] // Link to orders
-  userGameEntries  UserGameEntry[] // Link to game entries
+  id                       String          @id @default(cuid())
+  name                     String?
+  email                    String          @unique
+  emailVerified            DateTime?
+  image                    String?
+  stripeCustomerId         String?         @unique
+  bio                      String?
+  favouriteTeam            String?
+  location                 String?
+  username                 String?         @unique
+  hashedPassword           String?
+  role                     Role            @default(USER)
+  emailVerificationExpires DateTime?
+  emailVerificationToken   String?         @unique
+  passwordResetExpires     DateTime?
+  passwordResetToken       String?         @unique
+  accounts                 Account[]
+  orders                   Order[]
+  sessions                 Session[]
+  userGameEntries          UserGameEntry[]
+  adminAuditLogs           AdminAuditLog[]
+  notifications            Notification[]
 }
 
 model VerificationToken {
@@ -69,32 +66,227 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// Stripe Integration Models
 model Order {
   id                    String   @id @default(cuid())
   userId                String
-  user                  User     @relation(fields: [userId], references: [id])
-  amount                Int // Amount in cents
+  amount                Int
   currency              String
-  status                String // e.g., "pending", "completed", "failed"
-  stripePaymentIntentId String?  @unique // ID from Stripe for the payment intent
+  status                String
+  stripePaymentIntentId String?  @unique
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id])
 }
 
-// Enums
+model Game {
+  id            String         @id @default(cuid())
+  name          String         @unique
+  slug          String         @unique
+  description   String?
+  gameInstances GameInstance[]
+}
+
+model GameInstance {
+  id                 String          @id @default(cuid())
+  gameId             String
+  name               String
+  startDate          DateTime
+  endDate            DateTime
+  status             GameStatus      @default(PENDING)
+  prizePool          Int             @default(0)
+  entryFee           Int             @default(0)
+  instanceRoundCUIDs String[]
+  numberOfRounds     Int?
+  game               Game            @relation(fields: [gameId], references: [id])
+  userEntries        UserGameEntry[]
+}
+
+model UserGameEntry {
+  id                       String                    @id @default(cuid())
+  userId                   String
+  gameInstanceId           String
+  status                   UserGameEntryStatus       @default(PENDING_PAYMENT)
+  currentScore             Int                       @default(0)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  lastManStandingPicks     LastManStandingPick[]
+  raceTo33Assignment       RaceTo33Assignment?
+  tablePredictorPrediction TablePredictorPrediction?
+  gameInstance             GameInstance              @relation(fields: [gameInstanceId], references: [id])
+  user                     User                      @relation(fields: [userId], references: [id])
+  weeklyScorePredictions   WeeklyScorePrediction[]
+
+  @@unique([userId, gameInstanceId])
+}
+
+model LastManStandingPick {
+  id              String        @id @default(cuid())
+  userGameEntryId String
+  roundId         String
+  pickedTeamId    String
+  isCorrect       Boolean?
+  isEliminated    Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  round           Round         @relation(fields: [roundId], references: [id])
+  userGameEntry   UserGameEntry @relation(fields: [userGameEntryId], references: [id])
+
+  @@unique([userGameEntryId, roundId])
+}
+
+model TablePredictorPrediction {
+  id                  String        @id @default(cuid())
+  userGameEntryId     String        @unique
+  predictedOrder      String[]
+  predictedTotalGoals Int
+  score               Int?
+  createdAt           DateTime      @default(now())
+  userGameEntry       UserGameEntry @relation(fields: [userGameEntryId], references: [id])
+}
+
+model WeeklyScorePrediction {
+  id                 String        @id @default(cuid())
+  userGameEntryId    String
+  fixtureId          String
+  predictedHomeScore Int
+  predictedAwayScore Int
+  pointsAwarded      Int?
+  createdAt          DateTime      @default(now())
+  fixture            Fixture       @relation(fields: [fixtureId], references: [id])
+  userGameEntry      UserGameEntry @relation(fields: [userGameEntryId], references: [id])
+
+  @@unique([userGameEntryId, fixtureId])
+}
+
+model RaceTo33Assignment {
+  id              String        @id @default(cuid())
+  userGameEntryId String        @unique
+  cumulativeGoals Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  assignedTeamIds String[]
+  userGameEntry   UserGameEntry @relation(fields: [userGameEntryId], references: [id])
+}
+
+model League {
+  id           String    @id @default(cuid())
+  sportMonksId Int       @unique
+  name         String
+  countryId    Int
+  fixtures     Fixture[]
+  rounds       Round[]
+  seasons      Season[]
+  teams        Team[]
+}
+
+model Season {
+  id           String    @id @default(cuid())
+  sportMonksId Int       @unique
+  leagueId     String
+  name         String
+  isCurrent    Boolean
+  fixtures     Fixture[]
+  rounds       Round[]
+  league       League    @relation(fields: [leagueId], references: [id])
+  teams        Team[]
+}
+
+model Round {
+  id                   String                @id @default(cuid())
+  sportMonksId         Int                   @unique
+  seasonId             String
+  leagueId             String
+  name                 String
+  startDate            DateTime
+  endDate              DateTime
+  fixtures             Fixture[]
+  lastManStandingPicks LastManStandingPick[]
+  league               League                @relation(fields: [leagueId], references: [id])
+  season               Season                @relation(fields: [seasonId], references: [id])
+}
+
+model Team {
+  id           String    @id @default(cuid())
+  sportMonksId Int       @unique
+  name         String
+  logoPath     String?
+  leagueId     String
+  seasonId     String
+  awayFixtures Fixture[] @relation("AwayTeamFixtures")
+  homeFixtures Fixture[] @relation("HomeTeamFixtures")
+  league       League    @relation(fields: [leagueId], references: [id])
+  season       Season    @relation(fields: [seasonId], references: [id])
+}
+
+model Fixture {
+  id                     String                  @id @default(cuid())
+  sportMonksId           Int                     @unique
+  roundId                String
+  leagueId               String
+  seasonId               String
+  homeTeamId             String
+  awayTeamId             String
+  homeScore              Int?
+  awayScore              Int?
+  status                 String
+  matchDate              DateTime
+  awayTeam               Team                    @relation("AwayTeamFixtures", fields: [awayTeamId], references: [id])
+  homeTeam               Team                    @relation("HomeTeamFixtures", fields: [homeTeamId], references: [id])
+  league                 League                  @relation(fields: [leagueId], references: [id])
+  round                  Round                   @relation(fields: [roundId], references: [id])
+  season                 Season                  @relation(fields: [seasonId], references: [id])
+  weeklyScorePredictions WeeklyScorePrediction[]
+}
+
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  adminId     String
+  action      String
+  entityType  String
+  entityId    String
+  details     Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+  admin       User     @relation(fields: [adminId], references: [id])
+}
+
+model Notification {
+  id          String                @id @default(cuid())
+  userId      String
+  type        NotificationType
+  title       String
+  message     String
+  read        Boolean               @default(false)
+  priority    NotificationPriority  @default(MEDIUM)
+  actionUrl   String?
+  actionText  String?
+  metadata    Json?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  GAME
+  PAYMENT
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 enum Role {
   USER
   ADMIN
-}
-
-// Game Mechanics Models
-model Game {
-  id          String         @id @default(cuid())
-  name        String         @unique
-  slug        String         @unique // For URL paths (e.g., "last-man-standing")
-  description String?        @db.Text
-  gameInstances GameInstance[]
 }
 
 enum GameStatus {
@@ -104,168 +296,10 @@ enum GameStatus {
   ARCHIVED
 }
 
-model GameInstance {
-  id          String         @id @default(cuid())
-  gameId      String
-  game        Game           @relation(fields: [gameId], references: [id])
-  name        String // e.g., "Last Man Standing - August 2025"
-  startDate   DateTime
-  endDate     DateTime
-  status      GameStatus     @default(PENDING)
-  prizePool   Int            @default(0) // In cents
-  entryFee    Int            @default(0) // In cents
-  userEntries UserGameEntry[]
-  
-  // For games with custom duration (e.g., LMS, WSP running for N rounds)
-  numberOfRounds      Int?     // Admin-defined number of rounds for this instance
-  instanceRoundCUIDs  String[] // Array of local Round CUIDs this instance spans
-  // For LMS: currentRoundId, lastEliminationRoundId, etc. could still be useful for specific state tracking
-  // For Race to 33: targetGoals (e.g., 33)
-}
-
 enum UserGameEntryStatus {
   ACTIVE
-  ELIMINATED // For LMS
+  ELIMINATED
   COMPLETED
-  BUST // For Race to 33 if they go over 33
+  BUST
   PENDING_PAYMENT
-}
-
-model UserGameEntry {
-  id            String              @id @default(cuid())
-  userId        String
-  user          User                @relation(fields: [userId], references: [id])
-  gameInstanceId String
-  gameInstance  GameInstance        @relation(fields: [gameInstanceId], references: [id])
-  status        UserGameEntryStatus @default(PENDING_PAYMENT)
-  currentScore  Int                 @default(0) // For score-based games
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-
-  // Game-specific relations
-  lastManStandingPicks LastManStandingPick[]
-  tablePredictorPrediction TablePredictorPrediction?
-  weeklyScorePredictions WeeklyScorePrediction[]
-  raceTo33Assignment RaceTo33Assignment?
-
-  @@unique([userId, gameInstanceId])
-}
-
-model LastManStandingPick {
-  id              String        @id @default(cuid())
-  userGameEntryId String
-  userGameEntry   UserGameEntry @relation(fields: [userGameEntryId], references: [id])
-  roundId         String // SportMonks Round ID
-  round           Round         @relation(fields: [roundId], references: [id]) // Add relation to Round
-  pickedTeamId    String // SportMonks Team ID
-  isCorrect       Boolean?
-  isEliminated    Boolean       @default(false)
-  createdAt       DateTime      @default(now())
-
-  @@unique([userGameEntryId, roundId]) // A user can only pick once per round per game entry
-}
-
-model TablePredictorPrediction {
-  id              String        @id @default(cuid())
-  userGameEntryId String        @unique
-  userGameEntry   UserGameEntry @relation(fields: [userGameEntryId], references: [id])
-  predictedOrder  String[] // Array of SportMonks Team IDs in predicted order
-  predictedTotalGoals Int
-  score           Int? // How well they predicted
-  createdAt       DateTime      @default(now())
-}
-
-model WeeklyScorePrediction {
-  id              String        @id @default(cuid())
-  userGameEntryId String
-  userGameEntry   UserGameEntry @relation(fields: [userGameEntryId], references: [id])
-  fixtureId       String // SportMonks Fixture ID
-  fixture         Fixture       @relation(fields: [fixtureId], references: [id]) // Add relation to Fixture
-  predictedHomeScore Int
-  predictedAwayScore Int
-  pointsAwarded   Int?
-  createdAt       DateTime      @default(now())
-
-  @@unique([userGameEntryId, fixtureId]) // A user can only predict once per fixture per game entry
-}
-
-model RaceTo33Assignment {
-  id              String        @id @default(cuid())
-  userGameEntryId String        @unique
-  userGameEntry   UserGameEntry @relation(fields: [userGameEntryId], references: [id])
-  assignedTeamIds String[] // Array of 4 SportMonks Team IDs (stored as strings)
-  cumulativeGoals Int           @default(0)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-}
-
-// Cached SportMonks Data Models
-model League {
-  id          String     @id @default(cuid())
-  sportMonksId Int        @unique
-  name        String
-  countryId   Int
-  seasons     Season[] // Add inverse relation to Season
-  fixtures    Fixture[]
-  rounds      Round[]
-  teams       Team[]
-}
-
-model Season {
-  id          String     @id @default(cuid())
-  sportMonksId Int        @unique
-  leagueId    String
-  league      League     @relation(fields: [leagueId], references: [id])
-  name        String
-  isCurrent   Boolean
-  rounds      Round[]
-  teams       Team[]
-  fixtures    Fixture[]
-}
-
-model Round {
-  id          String                @id @default(cuid())
-  sportMonksId Int                   @unique
-  seasonId    String
-  season      Season                @relation(fields: [seasonId], references: [id])
-  leagueId    String // Add leagueId
-  league      League                @relation(fields: [leagueId], references: [id]) // Add relation to League
-  name        String
-  startDate   DateTime
-  endDate     DateTime
-  fixtures    Fixture[]
-  lastManStandingPicks LastManStandingPick[]
-}
-
-model Team {
-  id          String     @id @default(cuid())
-  sportMonksId Int        @unique
-  name        String
-  logoPath    String?
-  leagueId    String
-  league      League     @relation(fields: [leagueId], references: [id])
-  seasonId    String
-  season      Season     @relation(fields: [seasonId], references: [id])
-  homeFixtures Fixture[] @relation("HomeTeamFixtures")
-  awayFixtures Fixture[] @relation("AwayTeamFixtures")
-}
-
-model Fixture {
-  id          String                  @id @default(cuid())
-  sportMonksId Int                     @unique
-  roundId     String
-  round       Round                   @relation(fields: [roundId], references: [id])
-  leagueId    String // Add leagueId
-  league      League                  @relation(fields: [leagueId], references: [id]) // Add relation to League
-  seasonId    String // Add seasonId
-  season      Season                  @relation(fields: [seasonId], references: [id]) // Add relation to Season
-  homeTeamId  String
-  homeTeam    Team                    @relation("HomeTeamFixtures", fields: [homeTeamId], references: [id])
-  awayTeamId  String
-  awayTeam    Team                    @relation("AwayTeamFixtures", fields: [awayTeamId], references: [id])
-  homeScore   Int?
-  awayScore   Int?
-  status      String // e.g., "FT", "NS", "LIVE"
-  matchDate   DateTime
-  weeklyScorePredictions WeeklyScorePrediction[]
 }

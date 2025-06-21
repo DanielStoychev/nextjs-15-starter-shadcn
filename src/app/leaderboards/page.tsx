@@ -1,56 +1,126 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/registry/new-york-v4/ui/card";
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/registry/new-york-v4/ui/table";
 import type { Metadata } from 'next';
 
+import Leaderboards from '@/components/leaderboards/leaderboards';
+import { authOptions } from '@/lib/auth-config';
+import prisma from '@/lib/prisma';
+
+import { getServerSession } from 'next-auth';
+
 export const metadata: Metadata = {
-  title: 'Leaderboards',
-  description: 'View the top players and their rankings across various mini-competitions on FootyGames.co.uk.',
+    title: 'Leaderboards',
+    description: 'View the top players and their rankings across various mini-competitions on FootyGames.co.uk.'
 };
 
-const leaderboardData = [
-  { rank: 1, name: "PlayerOne", score: 1500, game: "Last Man Standing" },
-  { rank: 2, name: "FootballFanatic", score: 1450, game: "Table Predictor" },
-  { rank: 3, name: "GoalGetter", score: 1400, game: "Weekly Score Predictor" },
-  { rank: 4, name: "Tactician", score: 1380, game: "Race to 33" },
-  { rank: 5, name: "ProPredictor", score: 1350, game: "Last Man Standing" },
-];
+// Real function to calculate user stats based on actual game data
+async function calculateUserStats() {
+    const users = await prisma.user.findMany({
+        select: {
+            id: true,
+            name: true,
+            email: true,
+            userGameEntries: {
+                select: {
+                    id: true,
+                    status: true,
+                    currentScore: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    gameInstance: {
+                        select: {
+                            id: true,
+                            entryFee: true,
+                            prizePool: true,
+                            status: true,
+                            game: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    slug: true
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
 
-export default function LeaderboardsPage() {
-  return (
-    <main className="flex min-h-[calc(100vh-14rem)] flex-col items-center p-4 sm:p-8">
-      <Card className="w-full max-w-4xl bg-card text-card-foreground border-border shadow-xl">
-        <CardHeader className="text-center">
-          <CardTitle className="text-3xl sm:text-4xl font-bold mb-4">
-            Leaderboards
-          </CardTitle>
-          <CardDescription className="text-lg text-muted-foreground">
-            See who's at the top of the game!
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableCaption>A list of top players across various competitions.</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[100px]">Rank</TableHead>
-                <TableHead>Player Name</TableHead>
-                <TableHead>Score</TableHead>
-                <TableHead className="text-right">Game</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {leaderboardData.map((entry) => (
-                <TableRow key={entry.rank}>
-                  <TableCell className="font-medium">{entry.rank}</TableCell>
-                  <TableCell>{entry.name}</TableCell>
-                  <TableCell>{entry.score}</TableCell>
-                  <TableCell className="text-right">{entry.game}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </main>
-  );
+    return users.map((user) => {
+        const entries = user.userGameEntries;
+        const totalGames = entries.length;
+
+        // Find completed games
+        const completedGames = entries.filter((entry) => entry.gameInstance.status === 'COMPLETED');
+
+        // Calculate wins (entries with status COMPLETED and high score)
+        const winningEntries = entries.filter((entry) => entry.status === 'COMPLETED' && entry.currentScore > 0);
+
+        const totalWins = winningEntries.length;
+
+        // Calculate earnings based on game prize pools
+        const totalEarnings = winningEntries.reduce((total, entry) => {
+            // Calculate earnings as a share of prize pool based on score
+            // For simplicity, assume 1st place gets full prize
+            if (entry.currentScore >= 100) {
+                return total + entry.gameInstance.prizePool / 100; // Convert from cents
+            }
+
+            return total;
+        }, 0);
+
+        // Calculate win rate from completed games
+        const winRate = completedGames.length > 0 ? (totalWins / completedGames.length) * 100 : 0;
+
+        // Calculate average score from completed games
+        const scores = completedGames.map((entry) => entry.currentScore);
+        const averageScore = scores.length > 0 ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
+
+        // Determine streak (simplified)
+        const currentStreak = 0; // Would need game history to calculate this properly
+        const longestStreak = 0; // Would need game history to calculate this properly
+
+        // Find last active date
+        const lastActiveDate =
+            entries.length > 0
+                ? entries.reduce((latest, entry) => (entry.updatedAt > latest ? entry.updatedAt : latest), new Date(0))
+                : new Date();
+
+        // Determine favorite game
+        const gameFrequency: { [key: string]: number } = {};
+        entries.forEach((entry) => {
+            const gameName = entry.gameInstance.game.name;
+            gameFrequency[gameName] = (gameFrequency[gameName] || 0) + 1;
+        });
+
+        const favoriteGame =
+            Object.keys(gameFrequency).length > 0
+                ? Object.keys(gameFrequency).reduce((a, b) => (gameFrequency[a] > gameFrequency[b] ? a : b))
+                : undefined;
+
+        return {
+            userId: user.id,
+            username: user.name || 'Anonymous',
+            email: user.email,
+            totalGames,
+            totalWins,
+            totalEarnings,
+            averageScore,
+            winRate,
+            currentStreak,
+            longestStreak,
+            lastActiveDate,
+            favoriteGame
+        };
+    });
+}
+
+export default async function LeaderboardsPage() {
+    const session = await getServerSession(authOptions);
+    const userStats = await calculateUserStats();
+
+    return (
+        <div className='container mx-auto py-8'>
+            <Leaderboards userStats={userStats} currentUserId={session?.user?.id} />
+        </div>
+    );
 }

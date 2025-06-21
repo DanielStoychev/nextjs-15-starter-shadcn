@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth-config';
 // Import GameStatus
 // Assuming this is the correct path
 import prisma from '@/lib/prisma';
@@ -95,6 +95,7 @@ export async function GET(request: Request) {
                 };
             }
             // For non-admins, only return anonymized data (user and score)
+
             return baseEntry;
         });
 

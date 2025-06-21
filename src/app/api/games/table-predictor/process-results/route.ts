@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { checkGameCompletionAndNotifyWinners } from '@/lib/notification-service';
 import prisma from '@/lib/prisma';
 import {
     getSeasonStandings,
@@ -218,6 +219,9 @@ export async function POST(request: Request) {
             where: { id: gameInstanceId },
             data: { status: 'COMPLETED' }
         });
+
+        // Trigger completion notifications
+        await checkGameCompletionAndNotifyWinners();
 
         // Tie-breaking (using actualTotalGoals and prediction.predictedTotalGoals)
         // is handled when determining the final winner from the leaderboard, not by modifying the stored 'score'.

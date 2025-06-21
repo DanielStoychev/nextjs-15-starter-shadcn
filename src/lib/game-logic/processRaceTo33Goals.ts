@@ -1,3 +1,4 @@
+import { notifyRaceTo33Victory } from '@/lib/notification-service';
 import prisma from '@/lib/prisma';
 import { UserGameEntryStatus } from '@prisma/client';
 
@@ -51,6 +52,9 @@ export async function processRaceTo33Goals(gameInstanceId: string) {
             newStatus = UserGameEntryStatus.COMPLETED;
             completedCount++;
             console.log(`User ${assignment.userGameEntry.userId} reached exactly 33 goals!`);
+
+            // Trigger victory notification
+            await notifyRaceTo33Victory(assignment.userGameEntry.userId, gameInstanceId);
         } else if (newCumulativeGoals > 33) {
             newStatus = UserGameEntryStatus.BUST;
             bustCount++;

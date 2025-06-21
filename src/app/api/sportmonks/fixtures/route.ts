@@ -12,7 +12,7 @@ export async function GET(request: Request) {
         const leagues = searchParams.get('leagues');
 
         if (roundId) {
-            const response = await getRoundFixtures(Number(roundId), 'participants,scores,state');
+            const response = await getRoundFixtures(Number(roundId));
 
             return NextResponse.json(response.data);
         } else if (startDate && endDate) {

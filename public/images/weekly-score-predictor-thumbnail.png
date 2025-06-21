@@ -1,0 +1,16 @@
+<svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="300" height="200" fill="#22c55e"/>
+  <rect x="20" y="20" width="260" height="160" fill="#16a34a" rx="8"/>
+  <text x="150" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white">
+    Weekly Score
+  </text>
+  <text x="150" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white">
+    Predictor
+  </text>
+  <circle cx="80" cy="140" r="15" fill="white"/>
+  <circle cx="150" cy="140" r="15" fill="white"/>
+  <circle cx="220" cy="140" r="15" fill="white"/>
+  <text x="150" y="170" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">
+    Predict weekly fixtures
+  </text>
+</svg>

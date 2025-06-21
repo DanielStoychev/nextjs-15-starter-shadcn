@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import { GameRulesButton } from '@/components/game-rules-button';
+import PayAndPlayButton from '@/components/games/pay-and-play-button';
 import { LastManStandingGame } from '@/components/last-man-standing-game';
 import { LastManStandingLeaderboard } from '@/components/last-man-standing-leaderboard';
 import { RaceTo33Game } from '@/components/race-to-33-game';
@@ -9,6 +10,7 @@ import TablePredictorGame from '@/components/table-predictor-game';
 import TablePredictorLeaderboard from '@/components/table-predictor-leaderboard';
 import WeeklyScorePredictorGame from '@/components/weekly-score-predictor-game';
 import WeeklyScorePredictorLeaderboard from '@/components/weekly-score-predictor-leaderboard';
+import { authOptions } from '@/lib/auth-config';
 // Corrected import
 import prisma from '@/lib/prisma';
 import {
@@ -26,16 +28,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/reg
 // Assuming GameInstance is the base model type, and Prisma namespace is available
 import { Game, League, Prisma, GameInstance as PrismaGameInstanceType, Season } from '@prisma/client';
 
+import { getServerSession } from 'next-auth';
+
 const PREMIER_LEAGUE_ID = 8;
 const CHAMPIONSHIP_ID = 9;
 const LEAGUE_ONE_ID = 12;
 const LEAGUE_TWO_ID = 14;
 
 interface GamePageProps {
-    params: {
+    params: Promise<{
         gameSlug: string;
         instanceId: string;
-    };
+    }>;
 }
 
 interface WspDisplayFixture {
@@ -127,18 +131,43 @@ async function findOrCreateTeam(participant: SportMonksParticipant, leagueIdCuid
 export default async function GamePage({ params }: GamePageProps) {
     const { gameSlug, instanceId } = await params;
 
+    // Get user session for authentication
+    const session = await getServerSession(authOptions);
+
     const gameInstanceData = await prisma.gameInstance.findUnique({
         where: { id: instanceId },
-        include: { game: true }
+        include: {
+            game: true,
+            userEntries: {
+                select: {
+                    status: true
+                }
+            }
+        }
     });
 
     if (!gameInstanceData) notFound();
     // Further check for game slug after confirming gameInstanceData and gameInstanceData.game exist
-    if (!gameInstanceData.game || gameInstanceData.game.slug !== gameSlug) notFound();
+    if (!gameInstanceData.game || gameInstanceData.game.slug !== gameSlug) notFound(); // Check if user has an existing entry for this game instance
+    let userEntry = null;
+    if (session?.user?.id) {
+        userEntry = await prisma.userGameEntry.findFirst({
+            where: {
+                userId: session.user.id,
+                gameInstanceId: instanceId
+            }
+        });
+    }
 
     // gameInstanceData is of type Prisma.GameInstanceGetPayload<{ include: { game: true } }>
     // This payload type should include all scalar fields of GameInstance plus the 'game' relation.
-    const gameInstance: Prisma.GameInstanceGetPayload<{ include: { game: true } }> = gameInstanceData;
+    const gameInstance: Prisma.GameInstanceGetPayload<{
+        include: { game: true; userEntries: { select: { status: true } } };
+    }> = gameInstanceData;
+
+    // Calculate dynamic prize pool based on active participants
+    const activeParticipants = gameInstanceData.userEntries.filter((entry) => entry.status === 'ACTIVE').length;
+    const dynamicPrizePool = activeParticipants * gameInstance.entryFee * 0.8; // Keep in pence for consistency
 
     const game = gameInstance.game;
     // Reverting to 'as any' due to persistent TS errors, assuming fields exist at runtime.
@@ -151,9 +180,17 @@ export default async function GamePage({ params }: GamePageProps) {
     let isSeasonFinished: boolean = false;
 
     if (game.slug === 'last-man-standing') {
+        console.log(`[LMS Debug] Starting Last Man Standing data fetch for game instance: ${gameInstance.id}`);
         try {
             const leagueDetailsResponse = await getLeagueDetails(PREMIER_LEAGUE_ID, 'currentSeason');
             const apiLeagueData = leagueDetailsResponse.data as SportMonksLeague; // Consider more specific typing if possible
+            console.log(
+                `[LMS Debug] League data:`,
+                apiLeagueData?.name,
+                `Current season:`,
+                apiLeagueData?.currentseason?.name
+            );
+
             let dbLeague: League | null = null; // Use Prisma type directly
             if (apiLeagueData && apiLeagueData.id) {
                 dbLeague = await prisma.league.findUnique({ where: { sportMonksId: apiLeagueData.id } });
@@ -220,9 +257,30 @@ export default async function GamePage({ params }: GamePageProps) {
                         const roundsResponse = await getSeasonRounds(currentSeasonData.id);
                         const rounds: SportMonksRound[] = roundsResponse.data || [];
                         rounds.sort((a, b) => new Date(a.starting_at).getTime() - new Date(b.starting_at).getTime());
-                        targetRoundData =
-                            rounds.find((r) => new Date(r.ending_at) >= new Date()) ||
-                            (rounds.length > 0 ? rounds[rounds.length - 1] : null);
+
+                        console.log(`[LMS Debug] Found ${rounds.length} rounds for season ${currentSeasonData.id}`);
+
+                        // For seasons that haven't started yet, show the first round
+                        // For seasons in progress, show the current/upcoming round
+                        const now = new Date();
+
+                        // First, try to find a round that hasn't ended yet (ongoing or upcoming)
+                        targetRoundData = rounds.find((r) => new Date(r.ending_at) >= now) || null;
+
+                        // If no ongoing/upcoming round found, but we have rounds, use the first round
+                        // This handles the case where the season hasn't started yet
+                        if (!targetRoundData && rounds.length > 0) {
+                            targetRoundData = rounds[0]; // First round of the season
+                            console.log(`[LMS Debug] Using first round of season: ${targetRoundData.name}`);
+                        }
+
+                        // If still no round and we have rounds, use the last one as fallback
+                        if (!targetRoundData && rounds.length > 0) {
+                            targetRoundData = rounds[rounds.length - 1];
+                            console.log(`[LMS Debug] Using last round as fallback: ${targetRoundData.name}`);
+                        }
+
+                        console.log(`[LMS Debug] Selected round: ${targetRoundData?.name || 'none'}`);
 
                         if (targetRoundData && targetRoundData.id && dbLeague && dbSeason) {
                             targetDbRound = await prisma.round.findUnique({
@@ -242,20 +300,38 @@ export default async function GamePage({ params }: GamePageProps) {
                                             leagueId: dbLeague.id
                                         }
                                     });
+                                    console.log(`[LMS Debug] Created new round in DB: ${targetDbRound.name}`);
                                 }
+                            } else {
+                                console.log(`[LMS Debug] Found existing round in DB: ${targetDbRound.name}`);
                             }
                         }
                     }
 
-                    if (targetDbRound) liveLmsCurrentRoundDbId = targetDbRound.id;
+                    if (targetDbRound) {
+                        liveLmsCurrentRoundDbId = targetDbRound.id;
+                        console.log(`[LMS Debug] Final liveLmsCurrentRoundDbId set to: ${liveLmsCurrentRoundDbId}`);
+                    } else {
+                        console.log(`[LMS Debug] No targetDbRound found, liveLmsCurrentRoundDbId remains null`);
+                    }
 
                     if (targetRoundData && targetRoundData.id) {
+                        console.log(
+                            `[LMS Debug] Fetching fixtures for round ${targetRoundData.name} (SportMonks ID: ${targetRoundData.id})`
+                        );
                         // Ensure we have a SportMonks round to fetch fixtures for
                         const roundFixturesResponse = await getRoundFixtures(targetRoundData.id); // Use SportMonks ID
+                        console.log(`[LMS Debug] Round fixtures response:`, roundFixturesResponse);
+
                         const initialFixturesData: SportMonksFixture[] =
                             roundFixturesResponse.data?.fixtures?.data || roundFixturesResponse.data?.fixtures || [];
 
+                        console.log(`[LMS Debug] Raw fixtures data length: ${initialFixturesData.length}`);
+
                         if (initialFixturesData.length > 0) {
+                            console.log(
+                                `[LMS Debug] Found ${initialFixturesData.length} fixtures for round ${targetRoundData.name}`
+                            );
                             const fixtureIds = initialFixturesData.map((f) => f.id).join(',');
                             const [participantsResp, scoresResp] = await Promise.all([
                                 getFixturesDetailsByIds(fixtureIds, 'participants'),
@@ -274,7 +350,14 @@ export default async function GamePage({ params }: GamePageProps) {
                                     scores: sData?.scores || []
                                 };
                             });
+                            console.log(`[LMS Debug] Processed ${liveFixtures.length} fixtures with participants`);
+                        } else {
+                            console.log(
+                                `[LMS Debug] No fixtures found for round ${targetRoundData.name} (ID: ${targetRoundData.id})`
+                            );
                         }
+                    } else {
+                        console.log(`[LMS Debug] No targetRoundData found to fetch fixtures for`);
                     }
                 }
             }
@@ -285,6 +368,12 @@ export default async function GamePage({ params }: GamePageProps) {
 
     const fixturesToPass = game.slug === 'last-man-standing' ? liveFixtures : [];
     const currentRoundIdToPass = game.slug === 'last-man-standing' ? liveLmsCurrentRoundDbId : null;
+
+    if (game.slug === 'last-man-standing') {
+        console.log(
+            `[LMS Debug] Final summary - Fixtures: ${fixturesToPass.length}, CurrentRoundId: ${currentRoundIdToPass}, SeasonFinished: ${isSeasonFinished}`
+        );
+    }
 
     let tablePredictorTeams: Array<{ id: number; name: string; image_path: string; country_id?: number }> = [];
     if (game.slug === 'table-predictor') {
@@ -633,51 +722,51 @@ export default async function GamePage({ params }: GamePageProps) {
                 </div>
                 {game.description && <GameRulesButton title={`${game.name} Rules`} description={game.description} />}
             </div>
-            <Card className='mb-6'>
-                <CardHeader className='text-center'>
-                    <CardTitle className='text-center'>Game Details</CardTitle>
-                    <CardDescription className='text-center'>{game.description}</CardDescription>
-                </CardHeader>
-                <CardContent className='flex flex-col items-center gap-2'>
-                    <p>
-                        <strong className='font-medium'>Game Type:</strong> {game.name}
-                    </p>
-                    <p>
-                        <strong className='font-medium'>Status:</strong> {gameInstance.status}{' '}
-                        {/* Use typed gameInstance */}
-                    </p>
-                    <p>
-                        <strong className='font-medium'>Starts:</strong>{' '}
-                        {new Date(gameInstance.startDate).toLocaleDateString()} {/* Use typed gameInstance */}
-                    </p>
-                    <p>
-                        <strong className='font-medium'>Ends:</strong>{' '}
-                        {new Date(gameInstance.endDate).toLocaleDateString()} {/* Use typed gameInstance */}
-                    </p>
-                    <p>
-                        <strong className='font-medium'>Entry Fee:</strong> £{(gameInstance.entryFee / 100).toFixed(2)}{' '}
-                        {/* Use typed gameInstance */}
-                    </p>
-                    <p>
-                        <strong className='font-medium'>Prize Pool:</strong> £
-                        {(gameInstance.prizePool / 100).toFixed(2)} {/* Use typed gameInstance */}
-                    </p>
-                </CardContent>
-            </Card>
-            {game.slug === 'last-man-standing' && (
+            {/* Show information card if user doesn't have active entry */}
+            {(!userEntry || userEntry.status !== 'ACTIVE') && (
+                <Card className='mt-6'>
+                    <CardHeader>
+                        <CardTitle className='flex items-center gap-2'>
+                            <GameRulesButton title='Game Rules' description={`Learn how to play ${game.name}`} />
+                            Game Rules & Instructions
+                        </CardTitle>
+                        <CardDescription>Learn how to play and what happens after you join</CardDescription>
+                    </CardHeader>
+                    <CardContent className='space-y-4'>
+                        <div className='rounded-lg border border-blue-200 bg-blue-50 p-4'>
+                            <h3 className='mb-2 font-semibold text-blue-900'>What happens after payment?</h3>
+                            <ol className='list-inside list-decimal space-y-1 text-sm text-blue-800'>
+                                <li>Your payment is automatically processed and confirmed</li>
+                                <li>You'll be redirected back to this page with an "Active Player" status</li>
+                                <li>The game interface will appear below where you can make your picks</li>
+                                <li>Start playing immediately - no waiting for admin approval!</li>
+                            </ol>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+            {/* Only show game interface if user has an ACTIVE entry */}
+            {userEntry && userEntry.status === 'ACTIVE' && game.slug === 'last-man-standing' && (
                 <LastManStandingGame
-                    gameInstance={gameInstance} // Pass the correctly typed gameInstance
+                    gameInstance={{
+                        ...gameInstance,
+                        game: {
+                            ...gameInstance.game,
+                            description: gameInstance.game.description || undefined
+                        }
+                    }}
                     fixtures={fixturesToPass}
                     currentRoundId={currentRoundIdToPass}
                     isSeasonFinished={isSeasonFinished}
                 />
             )}
+            {/* Always show leaderboard for visibility */}
             {game.slug === 'last-man-standing' && (
                 <div className='mt-8'>
                     <LastManStandingLeaderboard gameInstanceId={gameInstance.id} /> {/* Use typed gameInstance */}
                 </div>
             )}
-            {game.slug === 'table-predictor' && (
+            {userEntry && userEntry.status === 'ACTIVE' && game.slug === 'table-predictor' && (
                 <TablePredictorGame
                     gameInstanceId={gameInstance.id} // Use typed gameInstance
                     initialTeams={
@@ -697,7 +786,7 @@ export default async function GamePage({ params }: GamePageProps) {
                     {/* Use typed gameInstance */}
                 </div>
             )}
-            {game.slug === 'weekly-score-predictor' && (
+            {userEntry && userEntry.status === 'ACTIVE' && game.slug === 'weekly-score-predictor' && (
                 <WeeklyScorePredictorGame
                     gameInstanceId={gameInstance.id} // Use typed gameInstance
                     initialFixtures={transformedWspFixtures.length > 0 ? transformedWspFixtures : dummyWeeklyFixtures}
@@ -708,7 +797,9 @@ export default async function GamePage({ params }: GamePageProps) {
                     <WeeklyScorePredictorLeaderboard gameInstanceId={gameInstance.id} /> {/* Use typed gameInstance */}
                 </div>
             )}
-            {game.slug === 'race-to-33' && <RaceTo33Game gameInstanceId={gameInstance.id} />}{' '}
+            {userEntry && userEntry.status === 'ACTIVE' && game.slug === 'race-to-33' && (
+                <RaceTo33Game gameInstanceId={gameInstance.id} />
+            )}{' '}
             {/* Use typed gameInstance */}
             {game.slug === 'race-to-33' && (
                 <div className='mt-8'>

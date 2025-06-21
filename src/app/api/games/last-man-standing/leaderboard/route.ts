@@ -46,9 +46,41 @@ export async function GET(request: Request) {
                 status: entry.status,
                 latestPickRoundId: latestPick?.roundId || null,
                 latestPickTeamId: latestPick?.pickedTeamId || null,
+                latestPickTeamName: null as string | null, // Will be populated below
                 latestPickIsCorrect: latestPick?.isCorrect || null
             };
         });
+
+        // Get unique team IDs to fetch team details
+        const uniqueTeamIds = leaderboard
+            .map((entry) => entry.latestPickTeamId)
+            .filter((teamId) => teamId !== null)
+            .map((teamId) => parseInt(teamId!, 10))
+            .filter((teamId) => !isNaN(teamId));
+
+        // Fetch team details if we have team IDs
+        if (uniqueTeamIds.length > 0) {
+            const teams = await prisma.team.findMany({
+                where: {
+                    sportMonksId: {
+                        in: uniqueTeamIds
+                    }
+                },
+                select: {
+                    sportMonksId: true,
+                    name: true
+                }
+            });
+
+            const teamMap = new Map(teams.map((team) => [team.sportMonksId.toString(), team.name]));
+
+            // Update leaderboard entries with team names
+            leaderboard.forEach((entry) => {
+                if (entry.latestPickTeamId) {
+                    entry.latestPickTeamName = teamMap.get(entry.latestPickTeamId) || 'Unknown Team';
+                }
+            });
+        }
 
         return NextResponse.json(leaderboard, { status: 200 });
     } catch (error) {

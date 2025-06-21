@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { getLeagueDetails } from '@/lib/sportmonks-api';
 
-export async function GET(request: Request, { params }: { params: { leagueId: string } }) {
+export async function GET(request: Request, { params }: { params: Promise<{ leagueId: string }> }) {
     try {
         const { leagueId } = await params;
         const { searchParams } = new URL(request.url);

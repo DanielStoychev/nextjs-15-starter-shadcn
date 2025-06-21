@@ -1,10 +1,16 @@
 import type { Metadata } from 'next';
 import { unstable_noStore as noStore } from 'next/cache';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { BatchOperations } from '@/components/admin/batch-operations';
 import { CreateGameInstanceForm } from '@/components/admin/create-game-instance-form';
 import { GameInstancesTable } from '@/components/admin/game-instances-table';
+import JobManagement from '@/components/admin/job-management';
+import { ResultsManagement } from '@/components/admin/results-management';
+import StatisticsDashboard from '@/components/admin/statistics-dashboard';
+// import { EnhancedGameInstanceForm } from '@/components/admin/enhanced-game-instance-form'; // Commented out due to type issues
+import { authOptions } from '@/lib/auth-config';
 import prisma from '@/lib/prisma';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/registry/new-york-v4/ui/card';
 import type {
@@ -79,6 +85,11 @@ export default async function AdminDashboardPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className='grid gap-6'>
+                    {/* Statistics Dashboard */}
+                    <div className='mt-6'>
+                        <StatisticsDashboard />
+                    </div>
+
                     <p className='text-muted-foreground'>
                         This is the main administration area. You can manage various aspects of the platform from here.
                     </p>
@@ -96,10 +107,14 @@ export default async function AdminDashboardPage() {
                             <h3 className='text-foreground font-semibold'>Entries & Results</h3>
                             <p className='text-muted-foreground text-sm'>Monitor game entries and process results.</p>
                         </Card>
-                        <Card className='bg-muted/50 rounded-lg p-4'>
-                            <h3 className='text-foreground font-semibold'>Transactions</h3>
-                            <p className='text-muted-foreground text-sm'>View payment and prize transactions.</p>
-                        </Card>
+                        <Link href='/admin/payments'>
+                            <Card className='bg-muted/50 hover:bg-accent cursor-pointer rounded-lg p-4 transition-colors'>
+                                <h3 className='text-foreground font-semibold'>Payment Analytics</h3>
+                                <p className='text-muted-foreground text-sm'>
+                                    View payment transactions, revenue, and analytics.
+                                </p>
+                            </Card>
+                        </Link>
                     </div>
 
                     {/* Game Instance Management Section */}
@@ -124,6 +139,50 @@ export default async function AdminDashboardPage() {
                                 game: (instance as any).game // game relation should be fine with include
                             }))}
                         />
+                    </div>
+
+                    {/* Batch Operations Section */}
+                    <div className='mt-8'>
+                        <BatchOperations
+                            gameInstances={gameInstances.map((instance) => ({
+                                id: instance.id,
+                                name: instance.name,
+                                status: instance.status as 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED',
+                                startDate: instance.startDate.toISOString(),
+                                endDate: instance.endDate ? instance.endDate.toISOString() : new Date().toISOString(),
+                                entryFee: instance.entryFee,
+                                prizePool: instance.prizePool,
+                                game: {
+                                    id: (instance as any).game.id,
+                                    name: (instance as any).game.name,
+                                    slug: (instance as any).game.slug
+                                },
+                                totalEntries: (instance as any)._count?.userEntries || 0,
+                                totalRevenue: ((instance as any)._count?.userEntries || 0) * instance.entryFee,
+                                completedEntries: 0, // We'd need to calculate this from userEntries
+                                pendingEntries: 0 // We'd need to calculate this from userEntries
+                            }))}
+                        />
+                    </div>
+
+                    {/* Job Management Section */}
+                    <div className='mt-8'>
+                        <JobManagement />
+                    </div>
+
+                    {/* Results Management Section */}
+                    <div className='mt-8'>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Results Management</CardTitle>
+                                <CardDescription>
+                                    Process game results, apply admin overrides, and view audit logs.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResultsManagement />
+                            </CardContent>
+                        </Card>
                     </div>
                 </CardContent>
             </Card>

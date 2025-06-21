@@ -1,6 +1,8 @@
-"use client";
+'use client';
 
+import { api } from '@/lib/secure-api';
 import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/registry/new-york-v4/ui/avatar';
 import { Button } from '@/registry/new-york-v4/ui/button';
 import {
     Form,
@@ -12,8 +14,6 @@ import {
     FormMessage
 } from '@/registry/new-york-v4/ui/form';
 import { Input } from '@/registry/new-york-v4/ui/input';
-import { Textarea } from '@/registry/new-york-v4/ui/textarea';
-import { Avatar, AvatarFallback, AvatarImage } from '@/registry/new-york-v4/ui/avatar';
 import {
     Select,
     SelectContent,
@@ -23,18 +23,37 @@ import {
     SelectTrigger,
     SelectValue
 } from '@/registry/new-york-v4/ui/select';
+import { Textarea } from '@/registry/new-york-v4/ui/textarea';
 import { zodResolver } from '@hookform/resolvers/zod';
 
+import { useSession } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { useSession } from 'next-auth/react'; // Import useSession
+
+// Import useSession
 
 const premierLeagueTeams = [
-    'Arsenal', 'Aston Villa', 'Bournemouth', 'Brentford', 'Brighton & Hove Albion',
-    'Chelsea', 'Crystal Palace', 'Everton', 'Fulham', 'Ipswich Town', 'Leicester City',
-    'Liverpool', 'Manchester City', 'Manchester United', 'Newcastle United',
-    'Nottingham Forest', 'Southampton', 'Tottenham Hotspur', 'West Ham United', 'Wolverhampton Wanderers'
+    'Arsenal',
+    'Aston Villa',
+    'Bournemouth',
+    'Brentford',
+    'Brighton & Hove Albion',
+    'Chelsea',
+    'Crystal Palace',
+    'Everton',
+    'Fulham',
+    'Ipswich Town',
+    'Leicester City',
+    'Liverpool',
+    'Manchester City',
+    'Manchester United',
+    'Newcastle United',
+    'Nottingham Forest',
+    'Southampton',
+    'Tottenham Hotspur',
+    'West Ham United',
+    'Wolverhampton Wanderers'
 ];
 
 const FormSchema = z.object({
@@ -46,18 +65,26 @@ const FormSchema = z.object({
             required_error: 'Email is required.'
         })
         .email({ message: 'Invalid email address.' }),
-    username: z.string().min(2, {
-        message: 'Username must be at least 2 characters.'
-    }).max(30, {
-        message: 'Username must not be longer than 30 characters.'
-    }).optional(),
-    bio: z.string().max(160, {
-        message: 'Bio must not be longer than 160 characters.'
-    }).min(4, {
-        message: 'Bio must be at least 4 characters.'
-    }).optional(),
+    username: z
+        .string()
+        .min(2, {
+            message: 'Username must be at least 2 characters.'
+        })
+        .max(30, {
+            message: 'Username must not be longer than 30 characters.'
+        })
+        .optional(),
+    bio: z
+        .string()
+        .max(160, {
+            message: 'Bio must not be longer than 160 characters.'
+        })
+        .min(4, {
+            message: 'Bio must be at least 4 characters.'
+        })
+        .optional(),
     location: z.string().optional(),
-    favouriteTeam: z.string().optional(),
+    favouriteTeam: z.string().optional()
 });
 
 interface ProfileEditFormProps {
@@ -76,35 +103,24 @@ export function ProfileEditForm({ onCancel, onSuccess }: ProfileEditFormProps) {
             username: session?.user?.username || '',
             bio: session?.user?.bio || '',
             location: session?.user?.location || '',
-            favouriteTeam: session?.user?.favouriteTeam || '',
+            favouriteTeam: session?.user?.favouriteTeam || ''
         }
     });
-
     async function onSubmit(data: z.infer<typeof FormSchema>) {
         try {
-            const response = await fetch('/api/profile', {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to update profile.');
-            }
+            const response = await api.put('/api/profile', data);
+            const result = await response.json();
 
             // Update the session on the client side to reflect changes
             await update();
             onSuccess(); // Call onSuccess to switch back to viewer mode
 
             toast('Profile updated successfully!', {
-                description: 'Your profile details have been saved.',
+                description: 'Your profile details have been saved.'
             });
         } catch (error: any) {
             toast('Error updating profile:', {
-                description: error.message || 'An unexpected error occurred.',
+                description: error.message || 'An unexpected error occurred.'
                 // Sonner does not support a 'variant' property directly.
                 // For destructive styling, you might need to use custom components or CSS.
             });
@@ -121,7 +137,7 @@ export function ProfileEditForm({ onCancel, onSuccess }: ProfileEditFormProps) {
                     </Avatar>
                     <div>
                         <h3 className='text-lg font-semibold'>{session?.user?.name || 'Guest'}</h3>
-                        <p className='text-sm text-muted-foreground'>{session?.user?.email}</p>
+                        <p className='text-muted-foreground text-sm'>{session?.user?.email}</p>
                     </div>
                 </div>
                 <FormField
@@ -223,14 +239,12 @@ export function ProfileEditForm({ onCancel, onSuccess }: ProfileEditFormProps) {
                                     </SelectGroup>
                                 </SelectContent>
                             </Select>
-                            <FormDescription>
-                                Select your favourite Premier League team.
-                            </FormDescription>
+                            <FormDescription>Select your favourite Premier League team.</FormDescription>
                             <FormMessage />
                         </FormItem>
                     )}
                 />
-                <div className="flex gap-2">
+                <div className='flex gap-2'>
                     <Button type='submit'>Update Profile</Button>
                     <Button type='button' variant='outline' onClick={onCancel}>
                         Cancel

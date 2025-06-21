@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 
 import Image from 'next/image';
 
-import { GameInstance } from '@/generated/prisma';
 import { Button } from '@/registry/new-york-v4/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/registry/new-york-v4/ui/card';
+import { GameInstance } from '@prisma/client';
 
 import { useSession } from 'next-auth/react';
 
@@ -33,7 +33,12 @@ interface Fixture {
 }
 
 interface LastManStandingGameProps {
-    gameInstance: GameInstance;
+    gameInstance: GameInstance & {
+        game: {
+            name: string;
+            description?: string;
+        };
+    };
     fixtures: Fixture[];
     currentRoundId: string | null;
     isSeasonFinished: boolean;
@@ -262,82 +267,218 @@ export function LastManStandingGame({
     }
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle className='text-center'>Make Your Pick for This Week</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <p className='mb-4 text-center'>Select one team you predict will win their match this week.</p>
-                <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
-                    {fixtures.map((fixture) => (
-                        <div key={fixture.id} className='rounded-md border p-4'>
-                            <h3 className='mb-2 text-center font-semibold'>
-                                {fixture.participants.find((p) => p.meta.location === 'home')?.name} vs{' '}
-                                {fixture.participants.find((p) => p.meta.location === 'away')?.name}
-                            </h3>
-                            <p className='text-muted-foreground text-center text-sm'>
-                                Kick-off: {formattedDates[fixture.id] || new Date(fixture.starting_at).toISOString()}
-                            </p>
-                            <div className='mt-4 flex justify-around'>
-                                {fixture.participants.map((participant) => {
-                                    // Disable if round is in play OR if team was picked in another round of this instance
-                                    const isTeamDisabledForOtherRounds = previouslyPickedTeamIdsInOtherRounds.includes(
-                                        String(participant.id)
-                                    );
-                                    // Allow picking the currently picked team again (to change away from it)
-                                    const isCurrentlyPickedTeam =
-                                        currentPickForRound?.pickedTeamId === String(participant.id);
-
-                                    const isSelectionDisabled =
-                                        isRoundInPlay || (isTeamDisabledForOtherRounds && !isCurrentlyPickedTeam);
-
-                                    const percentageData = pickPercentages.find(
-                                        (p) => p.teamId === String(participant.id)
-                                    );
-
-                                    return (
-                                        <div
-                                            key={participant.id}
-                                            onClick={() => !isSelectionDisabled && handlePickTeam(participant.id)}
-                                            className={`flex h-auto flex-col items-center rounded-md border p-2 transition-colors ${
-                                                isSelectionDisabled
-                                                    ? 'bg-muted cursor-not-allowed opacity-50'
-                                                    : 'hover:bg-accent cursor-pointer'
-                                            } ${
-                                                selectedTeamId === participant.id && !isSelectionDisabled
-                                                    ? 'bg-primary text-primary-foreground'
-                                                    : ''
-                                            }`}>
-                                            {participant.image_path && (
-                                                <Image
-                                                    src={participant.image_path}
-                                                    alt={participant.name}
-                                                    width={40}
-                                                    height={40}
-                                                    className='mb-1'
-                                                />
-                                            )}
-                                            <span>{participant.name}</span>
-                                            {isRoundInPlay && percentageData && (
-                                                <span className='text-muted-foreground mt-1 text-xs'>
-                                                    ({percentageData.percentage}%)
-                                                </span>
-                                            )}
-                                            {/* Optionally, show a placeholder if !isRoundInPlay and percentages are hidden */}
-                                        </div>
-                                    );
-                                })}
+        <div className='space-y-6'>
+            {/* Game Details Section */}
+            <Card>
+                <CardHeader className='pb-4'>
+                    <CardTitle className='text-center text-xl font-bold'>{gameInstance.game.name}</CardTitle>
+                    <p className='text-muted-foreground text-center text-sm font-medium'>{gameInstance.name}</p>
+                </CardHeader>
+                <CardContent className='pt-0'>
+                    <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
+                        {/* Game Status */}
+                        <div className='bg-muted/50 rounded-lg border p-3 text-center shadow-sm'>
+                            <div className='text-muted-foreground mb-1 text-xs font-semibold tracking-wide uppercase'>
+                                Status
+                            </div>
+                            <div
+                                className={`text-sm font-bold ${
+                                    gameInstance.status === 'ACTIVE'
+                                        ? 'text-green-600'
+                                        : gameInstance.status === 'PENDING'
+                                          ? 'text-orange-600'
+                                          : gameInstance.status === 'COMPLETED'
+                                            ? 'text-blue-600'
+                                            : 'text-gray-600'
+                                }`}>
+                                {gameInstance.status}
                             </div>
                         </div>
-                    ))}
-                </div>
-                <Button
-                    onClick={handleSubmitPick}
-                    disabled={!selectedTeamId || isLoadingPicks || isRoundInPlay}
-                    className='mt-6'>
-                    {isRoundInPlay ? 'Picks Locked' : currentPickForRound ? 'Update Pick' : 'Submit Pick'}
-                </Button>
-            </CardContent>
-        </Card>
+
+                        {/* Entry Fee */}
+                        <div className='bg-muted/50 rounded-lg border p-3 text-center shadow-sm'>
+                            <div className='text-muted-foreground mb-1 text-xs font-semibold tracking-wide uppercase'>
+                                Entry Fee
+                            </div>
+                            <div className='text-lg font-bold text-green-600'>
+                                £{(gameInstance.entryFee / 100).toFixed(2)}
+                            </div>
+                        </div>
+
+                        {/* Prize Pool */}
+                        <div className='bg-muted/50 rounded-lg border p-3 text-center shadow-sm'>
+                            <div className='text-muted-foreground mb-1 text-xs font-semibold tracking-wide uppercase'>
+                                Prize Pool
+                            </div>
+                            <div className='text-lg font-bold text-yellow-600'>
+                                £{(gameInstance.prizePool / 100).toFixed(2)}
+                            </div>
+                        </div>
+
+                        {/* Duration */}
+                        <div className='bg-muted/50 rounded-lg border p-3 text-center shadow-sm'>
+                            <div className='text-muted-foreground mb-1 text-xs font-semibold tracking-wide uppercase'>
+                                {gameInstance.numberOfRounds ? 'Rounds' : 'Duration'}
+                            </div>
+                            <div className='text-sm font-bold text-blue-600'>
+                                {gameInstance.numberOfRounds
+                                    ? `${gameInstance.numberOfRounds} rounds`
+                                    : (() => {
+                                          const start = new Date(gameInstance.startDate);
+                                          const end = new Date(gameInstance.endDate);
+                                          const days = Math.ceil(
+                                              (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+                                          );
+
+                                          return `${days} days`;
+                                      })()}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Date Range */}
+                    <div className='bg-muted/50 mt-4 rounded-lg border p-3 shadow-sm'>
+                        <div className='flex items-center justify-between text-sm'>
+                            <div>
+                                <span className='text-muted-foreground font-medium'>Starts:</span>
+                                <span className='ml-2 font-semibold'>
+                                    {new Date(gameInstance.startDate).toLocaleDateString('en-GB', {
+                                        weekday: 'short',
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric'
+                                    })}
+                                </span>
+                            </div>
+                            <div>
+                                <span className='text-muted-foreground font-medium'>Ends:</span>
+                                <span className='ml-2 font-semibold'>
+                                    {new Date(gameInstance.endDate).toLocaleDateString('en-GB', {
+                                        weekday: 'short',
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric'
+                                    })}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Game Description */}
+                    {gameInstance.game.description && (
+                        <div className='bg-muted/30 mt-4 rounded-lg border p-3'>
+                            <p className='text-sm leading-relaxed'>{gameInstance.game.description}</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Pick Selection Card */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className='text-center'>Make Your Pick for This Week</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className='mb-4 text-center'>Select one team you predict will win their match this week.</p>
+                    <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+                        {fixtures.map((fixture) => (
+                            <div key={fixture.id} className='rounded-md border p-4'>
+                                <h3 className='mb-2 text-center font-semibold'>
+                                    {fixture.participants.find((p) => p.meta.location === 'home')?.name} vs{' '}
+                                    {fixture.participants.find((p) => p.meta.location === 'away')?.name}
+                                </h3>
+                                <p className='text-muted-foreground text-center text-sm'>
+                                    Kick-off:{' '}
+                                    {formattedDates[fixture.id] || new Date(fixture.starting_at).toISOString()}
+                                </p>
+                                <div className='mt-4 flex justify-center gap-2'>
+                                    {fixture.participants.map((participant) => {
+                                        // Disable if round is in play OR if team was picked in another round of this instance
+                                        const isTeamDisabledForOtherRounds =
+                                            previouslyPickedTeamIdsInOtherRounds.includes(String(participant.id));
+                                        // Allow picking the currently picked team again (to change away from it)
+                                        const isCurrentlyPickedTeam =
+                                            currentPickForRound?.pickedTeamId === String(participant.id);
+
+                                        const isSelectionDisabled =
+                                            isRoundInPlay || (isTeamDisabledForOtherRounds && !isCurrentlyPickedTeam);
+
+                                        const percentageData = pickPercentages.find(
+                                            (p) => p.teamId === String(participant.id)
+                                        );
+
+                                        const isSelected = selectedTeamId === participant.id && !isSelectionDisabled;
+
+                                        return (
+                                            <div
+                                                key={participant.id}
+                                                onClick={() => !isSelectionDisabled && handlePickTeam(participant.id)}
+                                                className={`mx-2 flex h-28 w-32 flex-col items-center justify-center rounded-md border p-3 transition-all duration-200 ${
+                                                    isSelectionDisabled
+                                                        ? 'bg-muted cursor-not-allowed opacity-50'
+                                                        : 'hover:bg-accent relative cursor-pointer hover:z-10 hover:scale-105 hover:shadow-md'
+                                                } ${
+                                                    isSelected
+                                                        ? 'relative z-10 scale-105 border-slate-400 bg-slate-200 shadow-md ring-2 ring-slate-300'
+                                                        : isTeamDisabledForOtherRounds && !isCurrentlyPickedTeam
+                                                          ? 'border-red-200 bg-red-50'
+                                                          : 'hover:border-slate-300'
+                                                }`}>
+                                                {participant.image_path && (
+                                                    <Image
+                                                        src={participant.image_path}
+                                                        alt={participant.name}
+                                                        width={36}
+                                                        height={36}
+                                                        className={`mb-2 object-contain transition-all duration-200 ${
+                                                            isSelected ? 'scale-110' : ''
+                                                        }`}
+                                                    />
+                                                )}
+                                                <span
+                                                    className={`text-center text-xs leading-tight font-medium ${
+                                                        isSelected ? 'font-semibold' : ''
+                                                    }`}>
+                                                    {participant.name}
+                                                </span>
+                                                {isSelected && (
+                                                    <div className='mt-1 text-xs font-medium text-slate-600'>
+                                                        Selected
+                                                    </div>
+                                                )}
+                                                {isRoundInPlay && percentageData && (
+                                                    <span className='text-muted-foreground mt-1 text-xs'>
+                                                        ({percentageData.percentage}%)
+                                                    </span>
+                                                )}
+                                                {isTeamDisabledForOtherRounds && !isCurrentlyPickedTeam && (
+                                                    <div className='mt-1 text-xs font-medium text-red-600'>
+                                                        Already Used
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <Button
+                        onClick={handleSubmitPick}
+                        disabled={!selectedTeamId || isLoadingPicks || isRoundInPlay}
+                        className={`mt-6 w-full transition-all duration-200 ${
+                            selectedTeamId && !isRoundInPlay ? 'bg-green-600 text-white hover:bg-green-700' : ''
+                        }`}>
+                        {isRoundInPlay
+                            ? 'Picks Locked'
+                            : currentPickForRound
+                              ? 'Update Pick'
+                              : selectedTeamId
+                                ? 'Submit Pick'
+                                : 'Select a Team First'}
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
     );
 }

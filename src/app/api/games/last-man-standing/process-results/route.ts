@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth-config';
+import { notifyElimination } from '@/lib/notification-service';
 import prisma from '@/lib/prisma';
 import { getFixturesDetailsByIds, getRoundFixtures } from '@/lib/sportmonks-api';
 
@@ -296,6 +297,14 @@ export async function POST(request: Request) {
                         data: { status: 'ELIMINATED' }
                     });
                     usersEliminatedThisRound++;
+
+                    // Trigger elimination notification
+                    try {
+                        await notifyElimination(pick.userGameEntry.userId, gameInstanceId, localRound.name);
+                    } catch (notificationError) {
+                        console.error('Failed to send elimination notification:', notificationError);
+                        // Don't fail the main process if notification fails
+                    }
                 }
             }
         }

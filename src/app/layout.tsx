@@ -11,6 +11,8 @@ import AppHeader from '@/components/app-header';
 // Changed to local ThemeProvider
 
 import { AuthProvider } from '@/components/auth-provider';
+import ErrorBoundary from '@/components/error-boundary';
+import { OnboardingOverlay, OnboardingProvider, OnboardingStyles } from '@/components/onboarding';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/registry/new-york-v4/ui/sonner';
 
@@ -96,10 +98,16 @@ const Layout = ({ children }: Readonly<{ children: ReactNode }>) => {
                 className={`${geistSans.variable} ${geistMono.variable} bg-background text-foreground overscroll-none antialiased`}>
                 <AuthProvider>
                     <ThemeProvider attribute='class'>
-                        <AppHeader /> {/* Render AppHeader */}
-                        {children}
-                        <Toaster />
-                        <AppFooter /> {/* Render AppFooter */}
+                        <OnboardingProvider>
+                            <ErrorBoundary>
+                                <AppHeader data-onboarding='navigation' /> {/* Render AppHeader */}
+                                {children}
+                                <OnboardingOverlay />
+                                <OnboardingStyles />
+                                <Toaster />
+                                <AppFooter /> {/* Render AppFooter */}
+                            </ErrorBoundary>
+                        </OnboardingProvider>
                     </ThemeProvider>
                 </AuthProvider>
             </body>
